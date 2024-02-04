@@ -78,12 +78,12 @@ def split_text(text_path=None, title=None):
 
 
 def summarize_with_mlx(chunk=None, title=None):
-   """
-   Generates a summary for a chunk of text using the MLX model.
-   """
-   prompt = PROMPT.format(chunk=chunk, title=title)
-   print("Generating summary with MLX model...")
-   return generate(model, tokenizer, prompt=prompt, max_tokens=MODEL_MAX_TOKENS - count_tokens(prompt, tokenizer))
+    """
+    Generates a summary for a chunk of text using the MLX model.
+    """
+    prompt = PROMPT.format(chunk=chunk, title=title)
+    print("Generating summary with MLX model...")
+    return generate(model, tokenizer, prompt=prompt, max_tokens=MODEL_MAX_TOKENS - count_tokens(prompt, tokenizer))
 
 
 

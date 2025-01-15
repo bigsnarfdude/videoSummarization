@@ -1,85 +1,115 @@
-The markdown file you provided has good information, but it could be improved for readability and clarity. Here's a breakdown of the improvements:
+# Transcribe and Summarize Videos
 
-**1. File Structure:**
+This project provides a command-line tool to transcribe and summarize video files using Whisper.cpp for transcription and a large language model (LLM) through MLX for summarization. The output includes text summaries and Logseq-compatible Markdown notes.
 
-* Remove unnecessary leading spaces before file paths in the directory structure.
-
-**2. macOS Installation Guide:**
-
-*  **Bold important steps:** Make commands like `install whisper.cpp` or `pip3 install -r requirements.txt` bold for emphasis.
-*  **Separate installation from model setup:** Separate the installation of dependencies (`pip`) and `ffmpeg` from model setup instructions.
-*  **Llama Model Customization:** Explain how to change the model in `summarize_model.py` and the connection to `MODEL_MAX_TOKENS` and `WINDOW_SIZE` constants. 
-
-**3. Running the Workflow:**
-
-*  Use code formatting for the command (`python3 main.py --input_path "/path/to/your/video" --title "My Video Title"`).
-
-**4. Additional Notes:**
-
-*  Explain the purpose of the `TODO: Flaskify` note. 
-
-Here's the revised markdown:
-
-## Transcribe and Summarize Video
-
-This package helps you transcribe and summarize videos.
-
-**Project Structure:**
+## Project Structure
 
 ```
 .
-├── transcribe.py        (Your main script)
-├── transcribe/         (The transcribe package)
+├── transcribe.py        (Main script)
+├── transcribe/         (Package containing modules)
 │   ├── __init__.py
-│   ├── summarize_model.py
-│   ├── transcribe.py
-│   ├── get_video.py
-│   └── utils.py
+│   ├── summarize_model.py (LLM summarization logic)
+│   ├── transcribe.py     (Transcription logic)
+│   ├── get_video.py      (Video/audio processing)
+│   └── utils.py          (Utility functions)
 ├── files/
-│   ├── summaries/
-│   └── logseq/
-└── transcribe.log      (Log file will be created here)
+│   ├── audio/            (Extracted audio files)
+│   ├── summaries/        (Generated text summaries)
+│   └── logseq/           (Logseq Markdown notes)
+├── transcribe.log      (Log file)
+└── requirements.txt    (Project dependencies)
 ```
 
-**macOS Installation Guide**
+## Prerequisites
 
-### Setting Up the Environment
+Before using this tool, ensure you have the following:
 
-1. Install Whisper.cpp and Llama.cpp (follow their installation instructions)
-2. **Install dependencies:**
+*   **Python 3.7+:** Download and install the latest version from [python.org](https://www.python.org/).
+*   **Whisper.cpp:** Follow the installation instructions on the [Whisper.cpp repository](https://github.com/ggerganov/whisper.cpp). Ensure the `main` executable is in your PATH or you know its exact path.
+*   **FFmpeg:** Install FFmpeg for video/audio processing. On macOS, you can use `brew install ffmpeg`. On other systems, follow the instructions on the [FFmpeg website](https://ffmpeg.org/).
+*   **MLX:** Install MLX following the instructions on the relevant documentation.
+*   **Spacy Model:** Download the English language model:
     ```bash
-    pip3 install -r requirements.txt
-    ```
-3. **Download spacy model:**
-    ```bash
-    python3 -m spacy download en_core_web_sm
-    ```
-4. **Install ffmpeg:**
-    ```bash
-    brew install ffmpeg
-    ```
-5. **Activate model environment (if applicable):**
-    ```bash
-    source ~/.whisper/bin/activate
+    python -m spacy download en_core_web_sm
     ```
 
-**Model Configuration (Optional):**
+## Installation
 
-The default Llama.cpp model is `mistral-7b-instruct-v0.2.Q4_K_M.gguf`. You can change this model in `summarize_model.py`. Modifying the model might require adjusting these constants in the same file:
+1.  **Clone the repository:**
 
-```python
-MODEL_MAX_TOKENS = 8192  # Maximum tokens for prompt and response
-WINDOW_SIZE = 4096       # Maximum tokens for the input
-```
+    ```bash
+    git clone [https://your-repository-url.git](https://your-repository-url.git) # Replace with your repo URL
+    cd your-repository-name
+    ```
 
-**Running the Workflow:**
+2.  **Create a virtual environment (recommended):**
 
-Run the entire process with the following command:
+    ```bash
+    python3 -m venv .venv
+    source .venv/bin/activate  # On macOS/Linux
+    .venv\Scripts\activate     # On Windows
+    ```
+
+3.  **Install dependencies:**
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Configuration
+
+*   **Model Paths:** The paths to the Whisper.cpp model and the output directories are configured within the Python scripts (`transcribe.py`, `get_video.py`, `summarize_model.py`). You might need to adjust these paths to match your system setup.
+
+## Usage
+
+To transcribe and summarize a video, use the following command:
 
 ```bash
-python3 main.py --input_path "/path/to/your/video" --title "My Video Title"
+python transcribe.py --input_path "/path/to/your/video.mp4" --title "My Video Title"
 ```
 
-**Note:** Processing time increases with video length.
+*   `--input_path`: The path to the video file you want to process.
+*   `--title`: The title of the video, which will be used in the Logseq note.
 
-**TODO:** Implement a Flask web app interface.
+**Example:**
+
+```bash
+python transcribe.py --input_path "videos/my_lecture.mp4" --title "Introduction to Quantum Physics"
+```
+
+## Output
+
+The script will generate the following output:
+
+*   **Extracted Audio:** The audio from the video will be extracted and saved in the `files/audio/` directory.
+*   **Text Transcript:** The transcribed text will be saved as a `.txt` file in the `files/transcripts/` directory (created by `transcribe.py`).
+*   **Text Summary:** The summarized text will be saved as a `.txt` file in the `files/summaries/` directory.
+*   **Logseq Note:** A Markdown file formatted for Logseq will be created in the `files/logseq/` directory. This file will contain the summary and a link back to the video title.
+*   **Log File:** A log file named `transcribe.log` will be created in the project root to record the script's activity and any errors.
+
+## Troubleshooting
+
+*   **`ModuleNotFoundError`:** Ensure all dependencies are installed in your virtual environment.
+*   **`FileNotFoundError`:** Double-check file paths for the video, Whisper model, and output directories.
+*   **Errors in the Log File:** Consult the `transcribe.log` file for detailed error messages.
+
+## TODO
+
+*   Implement a Flask web interface for easier use.
+*   Add support for other summarization models.
+*   Improve error handling and input validation.
+```
+
+Key improvements in this version:
+
+*   **Clearer Structure:** Improved section headings and organization.
+*   **Detailed Prerequisites:** Added more detail about required software and how to install them.
+*   **Virtual Environment Instructions:** Included instructions for creating and activating a virtual environment.
+*   **Configuration Explanation:** Explained how to configure model paths and output directories.
+*   **Detailed Output Description:** Explained the different output files and their locations.
+*   **Troubleshooting Section:** Added a troubleshooting section with common errors.
+*   **TODO Section:** Highlighted planned future improvements.
+*   **File Structure Diagram:** Used a code block to visually represent the project structure.
+*   **Emphasis on Commands:** Used backticks (\`) to format commands for better readability.
+*   **Repository URL Placeholder:** Added a placeholder for the repository URL.

@@ -28,3 +28,6 @@ Run the whole workflow using
 python3 main.py --input_path "/path/to/your/video" --title "My Video Title"
 ```
 Remember the longer the video, the more time it might take to summarize.
+
+TODO:
+Flaskify

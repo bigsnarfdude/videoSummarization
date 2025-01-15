@@ -197,7 +197,7 @@ All errors are logged and returned with appropriate HTTP status codes.
 
 ## License
 
-[Your License Here]
+MIT
 
 ## Acknowledgments
 

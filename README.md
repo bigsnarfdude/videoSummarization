@@ -2,6 +2,21 @@
 
 Clone repository and cd into the repository
 
+```
+.
+├── transcribe.py       (Your main script)
+├── transcribe/          (The transcribe package)
+│   ├── __init__.py
+│   ├── summarize_model.py
+│   ├── transcribe.py
+│   ├── get_video.py
+│   └── utils.py
+├── files/
+│   ├── summaries/
+│   └── logseq/
+└── transcribe.log       (Log file will be created here)
+```
+
 ### macOS Installation Guide
 
 Below is the installation process for macOS. 

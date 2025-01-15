@@ -99,5 +99,3 @@ The script will generate the following output:
 *   Implement a Flask web interface for easier use.
 *   Add support for other summarization models.
 *   Improve error handling and input validation. the project structure.
-*   **Emphasis on Commands:** Used backticks (\`) to format commands for better readability.
-*   **Repository URL Placeholder:** Added a placeholder for the repository URL.

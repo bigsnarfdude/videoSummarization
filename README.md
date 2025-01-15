@@ -98,18 +98,6 @@ The script will generate the following output:
 
 *   Implement a Flask web interface for easier use.
 *   Add support for other summarization models.
-*   Improve error handling and input validation.
-```
-
-Key improvements in this version:
-
-*   **Clearer Structure:** Improved section headings and organization.
-*   **Detailed Prerequisites:** Added more detail about required software and how to install them.
-*   **Virtual Environment Instructions:** Included instructions for creating and activating a virtual environment.
-*   **Configuration Explanation:** Explained how to configure model paths and output directories.
-*   **Detailed Output Description:** Explained the different output files and their locations.
-*   **Troubleshooting Section:** Added a troubleshooting section with common errors.
-*   **TODO Section:** Highlighted planned future improvements.
-*   **File Structure Diagram:** Used a code block to visually represent the project structure.
+*   Improve error handling and input validation. the project structure.
 *   **Emphasis on Commands:** Used backticks (\`) to format commands for better readability.
 *   **Repository URL Placeholder:** Added a placeholder for the repository URL.

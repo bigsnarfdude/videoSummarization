@@ -30,7 +30,7 @@ def transcribe(audio_file, output_path="files/transcripts", model_path=None):
 
     # Use provided model path or default
     if model_path is None:
-        model_path = "/Users/vincent/development/whisper.cpp/models/ggml-medium.en.bin"
+        model_path = "/Users/vincent/development/whisper.cpp/models/ggml-large-v3.en.bin"
 
     start_time = timeit.default_timer()
 

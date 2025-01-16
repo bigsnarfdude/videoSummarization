@@ -4,32 +4,9 @@ import logging
 from mlx_lm import load, generate
 
 # Constants
-PROMPT = """
-Create a bullet point summary of the text that will follow after the heading `TEXT:`. 
-
-Do not just list the general topic, but the actual facts that were shared.
-
-For example, if a speaker claims that "a dosage of X increases Y", do not
-just write "the speaker disusses the effects of X", instead write "a dosage 
-of X increases Y".
-
-Use '- ' for bullet points:
-
-After you have made all bullet points, add one last bullet point that 
-summarizes the main message of the content, like so:
-
-- Main message: [MAIN MESSAGE HERE]
-
----
-
-TEXT TITLE: {title}
-
-TEXT:
-{chunk}
-"""
-MODEL_MAX_TOKENS = 8192
-WINDOW_SIZE = 4096
 SUMMARY_DIR = "files/summaries"
+MODEL_NAME = "mlx-community/phi-4-8bit"
+WINDOW_SIZE = 4096  # Adjust based on phi-4 context window
 
 # Configure logging
 logging.basicConfig(filename="summarization.log", level=logging.INFO,
@@ -37,107 +14,150 @@ logging.basicConfig(filename="summarization.log", level=logging.INFO,
 
 # Load model and tokenizer (cached version)
 model, tokenizer = None, None
+
 def get_model_and_tokenizer():
+    """Initialize or return cached model and tokenizer"""
     global model, tokenizer
     if model is None or tokenizer is None:
         try:
-            model, tokenizer = load("mistralai/Mistral-7B-Instruct-v0.2")
+            model, tokenizer = load(MODEL_NAME)
             logging.info("MLX model loaded successfully.")
         except Exception as e:
             logging.error(f"Error loading MLX model: {e}")
             return None, None
     return model, tokenizer
 
-def count_tokens(text, tokenizer):
-    """Counts tokens in a text string using the MLX model's tokenizer."""
+def create_summary_prompt(chunk, title):
+    """Create a prompt for summarization"""
+    base_prompt = f"""Create a clear and concise bullet-point summary of the following text. Focus on the key facts, claims, and arguments presented.
+
+Title: {title}
+
+Text:
+{chunk}
+
+Please provide your summary in bullet points, and end with a "Main Message" bullet point that captures the core idea:"""
+
+    # Apply chat template if available
+    if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
+        messages = [{"role": "user", "content": base_prompt}]
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+    return base_prompt
+
+def count_tokens(text):
+    """Count tokens in text using the model's tokenizer"""
+    model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
-        logging.error("Tokenizer not initialized.")
         return 0
     return len(tokenizer.encode(text))
 
 def split_text(text_path, title):
-    """Splits text into chunks considering the MLX model's window size."""
+    """Split text into chunks considering the model's context window"""
     model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
         return []
 
-    prompt_tokens = count_tokens(PROMPT.format(chunk="", title=title), tokenizer)
-    max_tokens = WINDOW_SIZE - prompt_tokens
+    # Calculate max tokens for content based on model window size
+    prompt_tokens = count_tokens(create_summary_prompt("", title))
+    max_tokens = WINDOW_SIZE - prompt_tokens - 100  # Buffer for generation
 
     try:
         nlp = spacy.load("en_core_web_sm")
-        nlp.add_pipe("sentencizer")
     except OSError:
-        logging.error("Downloading spacy model en_core_web_sm. Please wait...")
+        logging.info("Downloading spacy model en_core_web_sm...")
         import spacy.cli
         spacy.cli.download("en_core_web_sm")
         nlp = spacy.load("en_core_web_sm")
-        nlp.add_pipe("sentencizer")
 
     try:
         with open(text_path, "r", encoding="utf-8") as f:
             text = f.read()
-    except FileNotFoundError:
-        logging.error(f"Text file not found: {text_path}")
-        return []
     except Exception as e:
         logging.error(f"Error reading text file: {e}")
         return []
 
-    doc = nlp(text, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"])
+    # Split text into sentences
+    doc = nlp(text)
     chunks = []
     current_chunk = []
+    current_tokens = 0
 
     for sent in doc.sents:
         sent_text = sent.text.strip()
-        sent_tokens = count_tokens(sent_text, tokenizer)
+        sent_tokens = count_tokens(sent_text)
 
-        if sum(count_tokens(chunk, tokenizer) for chunk in current_chunk) + sent_tokens > max_tokens:
-            chunks.append(" ".join(current_chunk))
+        if current_tokens + sent_tokens > max_tokens:
+            if current_chunk:  # Save current chunk
+                chunks.append(" ".join(current_chunk))
             current_chunk = [sent_text]
+            current_tokens = sent_tokens
         else:
             current_chunk.append(sent_text)
+            current_tokens += sent_tokens
 
-    if current_chunk:
+    if current_chunk:  # Add the last chunk
         chunks.append(" ".join(current_chunk))
 
+    logging.info(f"Split text into {len(chunks)} chunks")
     return chunks
 
 def summarize_with_mlx(chunk, title):
-    """Generates a summary for a chunk of text using the MLX model."""
+    """Generate summary for a chunk using MLX model"""
     model, tokenizer = get_model_and_tokenizer()
     if model is None or tokenizer is None:
-        logging.error("MLX model or tokenizer not loaded. Skipping summarization.")
+        logging.error("Model or tokenizer not initialized")
         return None
 
-    prompt = PROMPT.format(chunk=chunk, title=title)
     try:
-        summary = generate(model, tokenizer, prompt=prompt, max_tokens=MODEL_MAX_TOKENS - count_tokens(prompt, tokenizer))
-        return summary
+        prompt = create_summary_prompt(chunk, title)
+        response = generate(
+            model, 
+            tokenizer, 
+            prompt=prompt,
+            max_tokens=1024,  # Adjust based on desired summary length
+            verbose=False
+        )
+        return response.strip()
     except Exception as e:
-        logging.error(f"Error during MLX summarization: {e}")
+        logging.error(f"Error during summarization: {e}")
         return None
 
 def summarize_in_parallel(chunks, title):
-    """Calls the MLX model to summarize each chunk of text in parallel."""
+    """Process all chunks to generate summaries"""
     summaries = []
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        logging.info(f"Processing chunk {i+1}/{len(chunks)}")
         summary = summarize_with_mlx(chunk, title)
-        if summary: # only appends if summary is not None
+        if summary:
             summaries.append(summary)
     return summaries
 
 def save_summaries(summaries, filename_only):
-    """Saves the generated summaries to a file."""
-    os.makedirs(SUMMARY_DIR, exist_ok=True)  # Create directory if it doesn't exist
-    summary_path = os.path.join(SUMMARY_DIR, f"{filename_only}.txt")
+    """Save generated summaries to file"""
+    os.makedirs(SUMMARY_DIR, exist_ok=True)
+    summary_path = os.path.join(SUMMARY_DIR, f"{filename_only}_summary.txt")
+    
     try:
         with open(summary_path, "w", encoding="utf-8") as f:
-            for summary in summaries:
+            for i, summary in enumerate(summaries):
+                if i > 0:  # Add separator between chunk summaries
+                    f.write("\n---\n\n")
                 f.write(summary)
-                f.write("\n\n")
-        logging.info(f"Summaries saved to: {summary_path}")
+                f.write("\n")
+        logging.info(f"Summary saved to: {summary_path}")
         return summary_path
     except Exception as e:
-        logging.error(f"Error saving summaries: {e}")
+        logging.error(f"Error saving summary: {e}")
         return None
+
+if __name__ == "__main__":
+    # Test code
+    import sys
+    if len(sys.argv) > 1:
+        text_path = sys.argv[1]
+        title = sys.argv[2] if len(sys.argv) > 2 else "Text Summary"
+        chunks = split_text(text_path, title)
+        summaries = summarize_in_parallel(chunks, title)
+        save_summaries(summaries, os.path.splitext(os.path.basename(text_path))[0])

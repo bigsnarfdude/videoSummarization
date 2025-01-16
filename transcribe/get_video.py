@@ -3,9 +3,9 @@ import os
 import sys
 import subprocess
 import logging
-from utils import get_filename, slugify
+from .utils import get_filename, slugify
 
-# Configure logging 
+# Configure logging
 logging.basicConfig(
     filename='video_processing.log',
     level=logging.INFO,

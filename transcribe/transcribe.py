@@ -3,7 +3,6 @@ import sys
 import timeit
 import subprocess
 import logging
-from pathlib import Path
 
 # Configure logging
 logging.basicConfig(
@@ -14,48 +13,17 @@ logging.basicConfig(
 class TranscriptionConfig:
     """Configuration for the transcription service"""
     def __init__(self):
-        # Try to get paths from environment variables first
-        self.whisper_path = os.getenv('WHISPER_PATH', '/Users/vincent/development/whisper.cpp/main')
-        self.model_path = os.getenv('WHISPER_MODEL_PATH', '')
+        # Set correct paths for your system
+        self.whisper_path = "/Users/vincent/development/whisper.cpp/main"
+        self.model_path = "/Users/vincent/development/whisper.cpp/models/ggml-large-v3.bin"
         self.validate()
 
     def validate(self):
         """Validate the configuration"""
-        # Check whisper executable
         if not os.path.exists(self.whisper_path):
-            raise FileNotFoundError(
-                f"Whisper executable not found at {self.whisper_path}. "
-                "Please set WHISPER_PATH environment variable."
-            )
-
-        # Check model file
-        if not self.model_path:
-            # Try to find model in common locations
-            common_locations = [
-                Path("/Users/vincent/development/whisper.cpp/models"),
-                Path.home() / "whisper.cpp/models",
-                Path("/usr/local/share/whisper/models"),
-                Path("./models")
-            ]
-            # List of supported model filenames
-            model_names = ["ggml-large-v3.bin", "ggml-large-v3.en.bin"]
-            
-            # Try each model name in each location
-            for location in common_locations:
-                for model_name in model_names:
-                    potential_path = location / model_name
-                    if potential_path.exists():
-                        self.model_path = str(potential_path)
-                        logging.info(f"Found whisper model at: {self.model_path}")
-                        break
-                if self.model_path:  # If we found a model, stop searching
-                    break
-            
-            if not self.model_path:
-                raise FileNotFoundError(
-                    f"Could not find whisper model file {model_name} in common locations. "
-                    "Please set WHISPER_MODEL_PATH environment variable."
-                )
+            raise FileNotFoundError(f"Whisper executable not found at {self.whisper_path}")
+        if not os.path.exists(self.model_path):
+            raise FileNotFoundError(f"Model file not found at {self.model_path}")
 
 def get_filename(file_path):
     """Returns the filename without extension"""
@@ -76,55 +44,51 @@ def transcribe(audio_file, output_path="files/transcripts", config=None):
         audio_file: Path to the WAV audio file
         output_path: Directory to save the transcript
         config: Optional TranscriptionConfig instance
-        
-    Returns:
-        tuple: (elapsed_time, transcript_text, transcript_path)
     """
     try:
         filename_only = get_filename(audio_file)
         validate_audio_file(audio_file)
-
+        
+        logging.info(f"Starting transcription of {audio_file}")
+        
         # Get or create config
         if config is None:
             config = TranscriptionConfig()
 
+        # Print debug info
+        logging.info("Transcription config:")
+        logging.info(f"  Whisper path: {config.whisper_path}")
+        logging.info(f"  Model path: {config.model_path}")
+        logging.info(f"  Audio file: {audio_file}")
+
         start_time = timeit.default_timer()
-        
-        # Verify files exist before running
-        logging.info(f"Verifying paths:")
-        logging.info(f"  Whisper executable: {config.whisper_path} (exists: {os.path.exists(config.whisper_path)})")
-        logging.info(f"  Model file: {config.model_path} (exists: {os.path.exists(config.model_path)})")
-        logging.info(f"  Audio file: {audio_file} (exists: {os.path.exists(audio_file)})")
-
-        # Check file permissions
-        try:
-            os.access(config.whisper_path, os.X_OK) or logging.warning("Whisper executable may not be executable")
-            os.access(config.model_path, os.R_OK) or logging.warning("Model file may not be readable")
-            os.access(audio_file, os.R_OK) or logging.warning("Audio file may not be readable")
-        except Exception as e:
-            logging.warning(f"Permission check failed: {e}")
-
-        # Construct command with quoted paths for shell safety
-        command = [
-            config.whisper_path,
-            "-m", config.model_path,
-            "-f", audio_file,
-            "-l", "en",  # Explicitly set language to English
-            "-np",      # No progress
-            "-nt"       # No timestamps
-        ]
-
-        logging.info(f"Running whisper command: {' '.join(command)}")
         
         # Set working directory to whisper.cpp directory
         whisper_dir = os.path.dirname(config.whisper_path)
+        command = [
+            config.whisper_path,
+            "-m", config.model_path,
+            "-f", os.path.abspath(audio_file),  # Use absolute path for audio file
+            "-l", "en",
+            "-np",
+            "-nt"
+        ]
+        
+        logging.info(f"Running command from {whisper_dir}: {' '.join(command)}")
+        
         process = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            check=False,  # Don't raise exception immediately
-            cwd=whisper_dir  # Run from whisper directory
+            check=False,
+            cwd=whisper_dir
         )
+
+        # Log all output regardless of success/failure
+        if process.stdout:
+            logging.info(f"Whisper stdout: {process.stdout}")
+        if process.stderr:
+            logging.error(f"Whisper stderr: {process.stderr}")
 
         # Check for errors
         if process.returncode != 0:
@@ -138,12 +102,19 @@ def transcribe(audio_file, output_path="files/transcripts", config=None):
 
         # Process output
         processed_str = process.stdout.replace('[BLANK_AUDIO]', '').strip()
+        if not processed_str:
+            logging.error("No transcript generated (empty output)")
+            raise RuntimeError("Transcription produced empty output")
+            
         end_time = timeit.default_timer()
         elapsed_time = int(end_time - start_time)
 
-        # Save transcript
+        # Ensure output_path is absolute
+        output_path = os.path.abspath(output_path)
         os.makedirs(output_path, exist_ok=True)
         text_path = os.path.join(output_path, f"{filename_only}.txt")
+        
+        logging.info(f"Writing transcript of length {len(processed_str)} to {text_path}")
         
         with open(text_path, "w") as file:
             file.write(processed_str)

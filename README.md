@@ -5,8 +5,8 @@ This project provides both a command-line tool and a REST API for transcribing a
 ## Features
 
 - Video to audio conversion using FFmpeg
-- Speech-to-text transcription using Whisper.cpp
-- Text summarization using MLX large language model
+- Speech-to-text transcription using Whisper.cpp Large V3
+- Text summarization using MLX Phi4 large language model
 - Logseq-compatible note generation
 - REST API for remote processing
 - Comprehensive logging and error handling

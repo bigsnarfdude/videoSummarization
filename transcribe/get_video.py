@@ -51,4 +51,4 @@ if __name__ == "__main__":
         wav_path = process_local_video(video_path)
         print("Audio processed to: ", wav_path)
     else:
-        print("Usage: python -m gpt_summarize.source_video.py <local_video_path>")
+        print("Usage: python get_video.py <local_video_path>")

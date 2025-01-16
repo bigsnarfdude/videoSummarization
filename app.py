@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import os
 import logging
+import traceback
 from werkzeug.utils import secure_filename
 from transcribe.summarize_model import save_summaries, split_text, summarize_in_parallel
 from transcribe.transcribe import transcribe
@@ -87,11 +88,13 @@ def process_video(file_path, title):
 
     except Exception as e:
         logging.error(f"Error processing video: {e}")
+        logging.error(traceback.format_exc())
         raise
 
 @app.route('/api/process', methods=['POST'])
 def process_video_endpoint():
     """API endpoint to process a video file"""
+    file_path = None
     try:
         # Check if a file was uploaded
         if 'file' not in request.files:
@@ -111,27 +114,56 @@ def process_video_endpoint():
         filename = secure_filename(file.filename)
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(file_path)
+        logging.info(f"File saved to: {file_path}")
         
-        # Process the video
-        result = process_video(file_path, title)
-        
-        # Clean up uploaded file
-        os.remove(file_path)
-        
-        # Return paths to generated files
-        return jsonify({
-            'status': 'success',
-            'files': {
-                'audio': os.path.basename(result['audio_path']),
-                'transcript': os.path.basename(result['transcript_path']),
-                'summary': os.path.basename(result['summary_path']),
-                'logseq': os.path.basename(result['logseq_path'])
-            }
-        }), 200
-        
+        try:
+            # Process the video
+            result = process_video(file_path, title)
+            
+            # Verify files exist and have content
+            for key, path in result.items():
+                if not os.path.exists(path):
+                    raise RuntimeError(f"Generated file {key} does not exist: {path}")
+                if os.path.getsize(path) == 0:
+                    raise RuntimeError(f"Generated file {key} is empty: {path}")
+                    
+            # Return paths to generated files
+            return jsonify({
+                'status': 'success',
+                'files': {
+                    'audio': os.path.basename(result['audio_path']),
+                    'transcript': os.path.basename(result['transcript_path']),
+                    'summary': os.path.basename(result['summary_path']),
+                    'logseq': os.path.basename(result['logseq_path'])
+                }
+            }), 200
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            logging.error(f"Processing error: {error_details}")
+            return jsonify({
+                'error': str(e),
+                'details': error_details,
+                'type': type(e).__name__
+            }), 500
+            
     except Exception as e:
-        logging.error(f"API error: {e}")
-        return jsonify({'error': str(e)}), 500
+        error_details = traceback.format_exc()
+        logging.error(f"API error: {error_details}")
+        return jsonify({
+            'error': str(e),
+            'details': error_details,
+            'type': type(e).__name__
+        }), 500
+        
+    finally:
+        # Clean up uploaded file
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                logging.info(f"Cleaned up uploaded file: {file_path}")
+            except Exception as e:
+                logging.error(f"Error cleaning up file {file_path}: {e}")
 
 @app.route('/api/status', methods=['GET'])
 def status():
@@ -140,4 +172,3 @@ def status():
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-

@@ -29,7 +29,20 @@ logging.basicConfig(
 )
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """
+    Check if the file has an allowed extension.
+    
+    Args:
+        filename (str): The filename to check
+        
+    Returns:
+        bool: True if file extension is allowed, False otherwise
+    """
+    # Check if filename has both a '.' and a valid filename before the extension
+    if '.' not in filename or not filename.rsplit('.', 1)[0]:
+        return False
+    
+    return filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def create_logseq_note(summary_path, title):
     """Creates a Logseq note from a summary file."""

@@ -9,10 +9,13 @@ MODEL_NAME = "mlx-community/phi-4-8bit"
 WINDOW_SIZE = 4096  # Adjust based on phi-4 context window
 
 # Configure logging
-logging.basicConfig(filename="summarization.log", level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    filename="summarization.log", 
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-# Load model and tokenizer (cached version)
+# Global model and tokenizer cache
 model, tokenizer = None, None
 
 def get_model_and_tokenizer():
@@ -26,6 +29,20 @@ def get_model_and_tokenizer():
             logging.error(f"Error loading MLX model: {e}")
             return None, None
     return model, tokenizer
+
+def initialize_spacy():
+    """Initialize spaCy with error handling"""
+    try:
+        try:
+            nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            logging.info("Downloading spacy model en_core_web_sm...")
+            spacy.cli.download("en_core_web_sm")
+            nlp = spacy.load("en_core_web_sm")
+        return nlp
+    except Exception as e:
+        logging.error(f"Error initializing spaCy: {e}")
+        raise
 
 def create_summary_prompt(chunk, title):
     """Create a prompt for summarization with enhanced structure for better outputs"""
@@ -64,7 +81,7 @@ Your precise summary:
     return base_prompt
 
 def count_tokens(text):
-    """Count tokens in text using the models tokenizer"""
+    """Count tokens in text using the model's tokenizer"""
     model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
         return 0
@@ -80,20 +97,21 @@ def split_text(text_path, title):
     prompt_tokens = count_tokens(create_summary_prompt("", title))
     max_tokens = WINDOW_SIZE - prompt_tokens - 100  # Buffer for generation
 
+    # Initialize spaCy
     try:
-        nlp = spacy.load("en_core_web_sm")
-    except OSError:
-        logging.info("Downloading spacy model en_core_web_sm...")
-        import spacy.cli
-        spacy.cli.download("en_core_web_sm")
-        nlp = spacy.load("en_core_web_sm")
+        nlp = initialize_spacy()
+        if nlp is None:
+            raise RuntimeError("Failed to initialize spaCy")
+    except Exception as e:
+        logging.error(f"spaCy initialization error: {e}")
+        raise
 
     try:
         with open(text_path, "r", encoding="utf-8") as f:
             text = f.read()
     except Exception as e:
         logging.error(f"Error reading text file: {e}")
-        return []
+        raise
 
     # Split text into sentences
     doc = nlp(text)
@@ -187,8 +205,6 @@ def summarize_with_mlx(chunk, title):
             tokenizer, 
             prompt=prompt,
             max_tokens=1024,
-            temperature=0.3,  # Lower temperature for more focused output
-            top_p=0.9,  # Slightly restricted sampling for better coherence
             verbose=False
         )
         
@@ -211,12 +227,17 @@ def summarize_in_parallel(chunks, title):
 
 def save_summaries(summaries, filename_only):
     """Save generated summaries to file"""
+    # Check if we have any valid summaries
+    valid_summaries = [s for s in summaries if s]
+    if not valid_summaries:
+        raise RuntimeError("No valid summaries generated to save")
+
     os.makedirs(SUMMARY_DIR, exist_ok=True)
     summary_path = os.path.join(SUMMARY_DIR, f"{filename_only}_summary.txt")
     
     try:
         with open(summary_path, "w", encoding="utf-8") as f:
-            for i, summary in enumerate(summaries):
+            for i, summary in enumerate(valid_summaries):
                 if i > 0:  # Add separator between chunk summaries
                     f.write("\n---\n\n")
                 f.write(summary)
@@ -225,7 +246,7 @@ def save_summaries(summaries, filename_only):
         return summary_path
     except Exception as e:
         logging.error(f"Error saving summary: {e}")
-        return None
+        raise
 
 if __name__ == "__main__":
     # Test code
@@ -233,6 +254,10 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         text_path = sys.argv[1]
         title = sys.argv[2] if len(sys.argv) > 2 else "Text Summary"
-        chunks = split_text(text_path, title)
-        summaries = summarize_in_parallel(chunks, title)
-        save_summaries(summaries, os.path.splitext(os.path.basename(text_path))[0])
+        try:
+            chunks = split_text(text_path, title)
+            summaries = summarize_in_parallel(chunks, title)
+            save_summaries(summaries, os.path.splitext(os.path.basename(text_path))[0])
+        except Exception as e:
+            logging.error(f"Error in main: {e}")
+            sys.exit(1)

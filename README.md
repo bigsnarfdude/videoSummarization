@@ -1,6 +1,6 @@
-# Video Transcription and Summarization API
+# LLM Based Video Transcription and Summarization API
 
-This project provides both a command-line tool and a REST API for transcribing and summarizing video files. It uses Whisper.cpp for transcription and MLX for summarization, generating text summaries and Logseq-compatible Markdown notes.
+This project provides both a command-line tool and a REST API for transcribing and summarizing video files. It uses Whisper.cpp for transcription and MLX Phi4 for summarization, generating text summaries and Logseq-compatible Markdown notes.
 
 ## Features
 

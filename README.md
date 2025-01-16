@@ -207,3 +207,15 @@ MIT
 
   ## TODO
   https://gist.github.com/bigsnarfdude/f1a8b31f3cbb4449cc6c79ff68603583 find and visual papers in same genre
+  refactor
+
+```
+import mlx_whisper
+
+target = "path/to/audioFile"
+transcription_model = "mlx-community/whisper-large-v3-mlx"
+transcribed = mlx_whisper.transcribe(target,path_or_hf_repo=transcription_model)
+
+print(transcribed["text"])
+
+```

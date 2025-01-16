@@ -28,15 +28,32 @@ def get_model_and_tokenizer():
     return model, tokenizer
 
 def create_summary_prompt(chunk, title):
-    """Create a prompt for summarization"""
-    base_prompt = f"""Create a clear and concise bullet-point summary of the following text. Focus on the key facts, claims, and arguments presented.
+    """Create a prompt for summarization with enhanced structure for better outputs"""
+    base_prompt = f"""You are a precise and accurate summarizer. Your task is to create a detailed summary of the following text, focusing on extracting specific facts, numbers, and key points. Follow these guidelines:
+
+1. Extract ONLY information that is explicitly stated in the text
+2. Use exact numbers, statistics, and quotes when present
+3. Maintain the original meaning without adding interpretations
 
 Title: {title}
 
-Text:
+Text to Summarize:
 {chunk}
 
-Please provide your summary in bullet points, and end with a "Main Message" bullet point that captures the core idea:"""
+Create your summary using this structure:
+- Start each point with "•" 
+- Include specific details and numbers
+- Quote important phrases in "quotes" when relevant
+- Organize points in logical order
+- End with "• Main Takeaway: [core message supported by the text]"
+
+Remember:
+- Do not include information not present in the text
+- Preserve exact terminology used in the source
+- Be specific rather than general
+- Focus on facts over opinions
+
+Your precise summary:
 
     # Apply chat template if available
     if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
@@ -103,8 +120,61 @@ def split_text(text_path, title):
     logging.info(f"Split text into {len(chunks)} chunks")
     return chunks
 
+def clean_and_format_summary(raw_summary):
+    """Clean and format the model's output for consistency"""
+    import re
+    
+    # Split into lines and clean up
+    lines = raw_summary.strip().split('\n')
+    formatted_lines = []
+    
+    for line in lines:
+        # Skip empty lines
+        if not line.strip():
+            continue
+            
+        line = line.strip()
+        
+        # Ensure each point starts with a bullet
+        if not line.startswith('•'):
+            # Handle cases where model used different bullet points or numbers
+            line = re.sub(r'^[-*•]?\s*', '• ', line)
+            line = re.sub(r'^\d+\.\s*', '• ', line)
+        
+        # Ensure consistent spacing after bullet
+        line = re.sub(r'^•\s*', '• ', line)
+        
+        # Fix quotation marks for consistency
+        line = re.sub(r'["""]', '"', line)
+        
+        # Ensure proper spacing around quotes
+        line = re.sub(r'(?<!")\s*"', ' "', line)
+        line = re.sub(r'"\s*(?!")', '" ', line)
+        
+        # Clean up multiple spaces
+        line = re.sub(r'\s+', ' ', line)
+        
+        formatted_lines.append(line)
+    
+    # Ensure main takeaway is at the end
+    main_takeaway = None
+    other_points = []
+    
+    for line in formatted_lines:
+        if 'main takeaway' in line.lower() or 'main message' in line.lower():
+            main_takeaway = line
+        else:
+            other_points.append(line)
+    
+    # Combine all points with proper spacing
+    result = '\n'.join(other_points)
+    if main_takeaway:
+        result += '\n\n' + main_takeaway
+        
+    return result
+
 def summarize_with_mlx(chunk, title):
-    """Generate summary for a chunk using MLX model"""
+    """Generate summary for a chunk using MLX model with enhanced output processing"""
     model, tokenizer = get_model_and_tokenizer()
     if model is None or tokenizer is None:
         logging.error("Model or tokenizer not initialized")
@@ -116,10 +186,15 @@ def summarize_with_mlx(chunk, title):
             model, 
             tokenizer, 
             prompt=prompt,
-            max_tokens=1024,  # Adjust based on desired summary length
+            max_tokens=1024,
+            temperature=0.3,  # Lower temperature for more focused output
+            top_p=0.9,  # Slightly restricted sampling for better coherence
             verbose=False
         )
-        return response.strip()
+        
+        # Clean and format the response
+        formatted_summary = clean_and_format_summary(response)
+        return formatted_summary
     except Exception as e:
         logging.error(f"Error during summarization: {e}")
         return None

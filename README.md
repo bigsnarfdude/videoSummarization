@@ -40,7 +40,6 @@ This project provides both a command-line tool and a REST API for transcribing a
   - Build and ensure the `main` executable is in your PATH
 - **FFmpeg** ([ffmpeg.org](https://ffmpeg.org/))
   - macOS: `brew install ffmpeg`
-  - Ubuntu: `apt-get install ffmpeg`
 - **MLX** (Follow MLX installation instructions)
 - **Spacy Model**:
   ```bash

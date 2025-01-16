@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import os
 import logging
 import traceback
@@ -29,7 +29,6 @@ logging.basicConfig(
 )
 
 def allowed_file(filename):
-    """Check if the file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def create_logseq_note(summary_path, title):
@@ -90,6 +89,11 @@ def process_video(file_path, title):
         logging.error(f"Error processing video: {e}")
         logging.error(traceback.format_exc())
         raise
+
+# Add route for home page
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 @app.route('/api/process', methods=['POST'])
 def process_video_endpoint():
@@ -167,7 +171,6 @@ def process_video_endpoint():
 
 @app.route('/api/status', methods=['GET'])
 def status():
-    """Simple status endpoint to check if the API is running"""
     return jsonify({'status': 'running'}), 200
 
 if __name__ == '__main__':

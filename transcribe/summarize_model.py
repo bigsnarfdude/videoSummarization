@@ -54,7 +54,7 @@ Remember:
 - Focus on facts over opinions
 
 Your precise summary:
-
+"""
     # Apply chat template if available
     if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
         messages = [{"role": "user", "content": base_prompt}]
@@ -64,7 +64,7 @@ Your precise summary:
     return base_prompt
 
 def count_tokens(text):
-    """Count tokens in text using the model's tokenizer"""
+    """Count tokens in text using the models tokenizer"""
     model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
         return 0

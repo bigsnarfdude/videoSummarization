@@ -204,3 +204,6 @@ MIT
 - Whisper.cpp project
 - MLX project
 - FFmpeg project
+
+  ## TODO
+  https://gist.github.com/bigsnarfdude/f1a8b31f3cbb4449cc6c79ff68603583 find and visual papers in same genre

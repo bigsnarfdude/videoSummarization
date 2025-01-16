@@ -1,36 +1,43 @@
-# LLM Based Video Transcription and Summarization API
+# Video Processing Web Application
 
-This project provides both a command-line tool and a REST API for transcribing and summarizing video files. It uses Whisper.cpp for transcription and MLX Phi4 for summarization, generating text summaries and Logseq-compatible Markdown notes.
+This project provides a web interface and REST API for transcribing and summarizing video files. It uses Whisper.cpp for transcription and MLX Phi4 for summarization, generating text summaries and Logseq-compatible Markdown notes.
 
 ## Features
 
+- User-friendly web interface for video uploads
 - Video to audio conversion using FFmpeg
 - Speech-to-text transcription using Whisper.cpp Large V3
 - Text summarization using MLX Phi4 large language model
 - Logseq-compatible note generation
-- REST API for remote processing
+- REST API for programmatic access
 - Comprehensive logging and error handling
+- Support for MP4, AVI, MOV, and MKV video formats
 
 ## Project Structure
 
 ```
 .
-├── app.py              (Flask API server)
-├── main.py             (Main CLI script)
-├── transcribe/         (Core package)
+├── app.py              # Flask web application and API server
+├── main.py             # CLI script for direct usage
+├── templates/          # Web interface templates
+│   └── index.html      # Main web interface
+├── static/             # Static web assets
+│   └── js/
+│       └── VideoProcessor.js  # React component for video upload
+├── transcribe/         # Core package
 │   ├── __init__.py
-│   ├── summarize_model.py (LLM summarization)
-│   ├── transcribe.py     (Whisper transcription)
-│   ├── get_video.py      (Video processing)
-│   └── utils.py          (Utilities)
-├── files/
-│   ├── uploads/          (Temporary video uploads)
-│   ├── audio/           (Extracted audio)
-│   ├── transcripts/     (Text transcripts)
-│   ├── summaries/       (Generated summaries)
-│   └── logseq/          (Logseq notes)
-├── *.log               (Log files)
-└── requirements.txt    (Dependencies)
+│   ├── summarize_model.py  # LLM summarization
+│   ├── transcribe.py      # Whisper transcription
+│   ├── get_video.py       # Video processing
+│   └── utils.py           # Utilities
+├── files/              # Generated files
+│   ├── uploads/        # Temporary video uploads
+│   ├── audio/         # Extracted audio
+│   ├── transcripts/   # Text transcripts
+│   ├── summaries/     # Generated summaries
+│   └── logseq/        # Logseq notes
+├── *.log              # Log files
+└── requirements.txt    # Dependencies
 ```
 
 ## Prerequisites
@@ -40,6 +47,8 @@ This project provides both a command-line tool and a REST API for transcribing a
   - Build and ensure the `main` executable is in your PATH
 - **FFmpeg** ([ffmpeg.org](https://ffmpeg.org/))
   - macOS: `brew install ffmpeg`
+  - Linux: `apt-get install ffmpeg`
+  - Windows: Download from ffmpeg website
 - **MLX** (Follow MLX installation instructions)
 - **Spacy Model**:
   ```bash
@@ -66,37 +75,35 @@ This project provides both a command-line tool and a REST API for transcribing a
    pip install -r requirements.txt
    ```
 
-## Configuration
-
-The application uses several configuration constants that can be modified in `app.py`:
-
-```python
-UPLOAD_FOLDER = 'files/uploads'
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
-LOG_FILE = "api.log"
-SUMMARIES_DIR = "files/summaries"
-LOGSEQ_DIR = "files/logseq"
-```
+4. Create required directories:
+   ```bash
+   mkdir -p templates static/js files/{uploads,audio,transcripts,summaries,logseq}
+   ```
 
 ## Usage
 
-### REST API
+### Web Interface
 
-1. Start the Flask server:
+1. Start the Flask application:
    ```bash
    python app.py
    ```
 
-2. The API will be available at `http://localhost:5000`
+2. Open your web browser and navigate to:
+   ```
+   http://localhost:5000
+   ```
 
-#### Endpoints
+3. Use the web interface to:
+   - Upload videos through drag-and-drop or file selection
+   - Monitor processing progress
+   - View and download generated files
+
+### REST API
+
+The application provides the following API endpoints:
 
 1. **Process Video** (`POST /api/process`)
-   - Multipart form data:
-     - `file`: Video file (required)
-     - `title`: Video title (optional)
-   
-   Example using curl:
    ```bash
    curl -X POST \
      -F "file=@/path/to/video.mp4" \
@@ -124,7 +131,7 @@ LOGSEQ_DIR = "files/logseq"
 
 ### Command Line Interface
 
-The original CLI is still available:
+For direct command-line usage:
 
 ```bash
 python main.py --input_path "/path/to/video.mp4" --title "Video Title"
@@ -134,28 +141,79 @@ python main.py --input_path "/path/to/video.mp4" --title "Video Title"
 
 The process generates several files:
 
-1. **Audio** (`files/audio/*.wav`): Extracted audio in WAV format
-2. **Transcript** (`files/transcripts/*.txt`): Raw text transcription
-3. **Summary** (`files/summaries/*.txt`): Bullet-point summary
-4. **Logseq Note** (`files/logseq/*.md`): Formatted Markdown note
+1. **Audio** (`files/audio/*.wav`)
+   - Extracted audio in WAV format
+   - 16kHz, mono, 16-bit PCM
+
+2. **Transcript** (`files/transcripts/*.txt`)
+   - Raw text transcription
+   - Generated by Whisper.cpp
+
+3. **Summary** (`files/summaries/*.txt`)
+   - Bullet-point summary
+   - Generated by MLX Phi4
+
+4. **Logseq Note** (`files/logseq/*.md`)
+   - Formatted Markdown note
+   - Ready for import into Logseq
+
+## Configuration
+
+Key configuration settings in `app.py`:
+
+```python
+UPLOAD_FOLDER = 'files/uploads'
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
+LOG_FILE = "api.log"
+SUMMARIES_DIR = "files/summaries"
+LOGSEQ_DIR = "files/logseq"
+```
 
 ## Logging
 
 The application maintains several log files:
-- `api.log`: API-specific logs
+- `api.log`: Web interface and API logs
 - `transcribe.log`: Transcription process logs
 - `summarization.log`: Summarization process logs
 - `video_processing.log`: Video/audio conversion logs
 
-## Error Handling
+## Troubleshooting
 
-The API includes comprehensive error handling for:
-- Invalid file types
-- Missing files
-- Processing errors
-- File system errors
+### Common Issues
 
-All errors are logged and returned with appropriate HTTP status codes.
+1. **Web Interface Not Loading**
+   - Verify Flask is running and port 5000 is available
+   - Check browser console for JavaScript errors
+   - Ensure all static files are in correct locations
+
+2. **Upload Errors**
+   - Verify file format is supported
+   - Check file size limits
+   - Ensure all directories have write permissions
+
+3. **Processing Errors**
+   - Check log files for detailed error messages
+   - Verify all dependencies are installed
+   - Ensure sufficient disk space
+
+### Solutions
+
+1. **Missing Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   python -m spacy download en_core_web_sm
+   ```
+
+2. **Permission Issues**
+   ```bash
+   chmod -R 755 files/
+   ```
+
+3. **Port Conflicts**
+   - Modify port in app.py if 5000 is in use
+   ```python
+   app.run(debug=True, host='0.0.0.0', port=5001)
+   ```
 
 ## Contributing
 
@@ -165,56 +223,13 @@ All errors are logged and returned with appropriate HTTP status codes.
 4. Push to the branch
 5. Create a Pull Request
 
-## Troubleshooting
-
-### Common Issues
-
-1. **ModuleNotFoundError**
-   - Verify virtual environment is activated
-   - Reinstall requirements: `pip install -r requirements.txt`
-
-2. **FileNotFoundError**
-   - Check paths to Whisper model and FFmpeg
-   - Verify directory permissions
-
-3. **Processing Errors**
-   - Check log files for detailed error messages
-   - Verify input video format is supported
-   - Ensure sufficient disk space
-
-### Performance Tips
-
-1. For large videos:
-   - Process in smaller chunks
-   - Monitor system resources
-   - Adjust chunk sizes in `summarize_model.py`
-
-2. For faster processing:
-   - Use GPU acceleration if available
-   - Optimize audio quality settings
-   - Adjust model parameters
-
 ## License
 
-MIT
+MIT License
 
 ## Acknowledgments
 
 - Whisper.cpp project
 - MLX project
 - FFmpeg project
-
-  ## TODO
-  https://gist.github.com/bigsnarfdude/f1a8b31f3cbb4449cc6c79ff68603583 find and visual papers in same genre
-  refactor
-
-```
-import mlx_whisper
-
-target = "path/to/audioFile"
-transcription_model = "mlx-community/whisper-large-v3-mlx"
-transcribed = mlx_whisper.transcribe(target,path_or_hf_repo=transcription_model)
-
-print(transcribed["text"])
-
-```
+- React and Flask communities

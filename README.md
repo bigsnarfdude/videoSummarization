@@ -16,7 +16,7 @@ This project provides both a command-line tool and a REST API for transcribing a
 ```
 .
 ├── app.py              (Flask API server)
-├── transcribe.py       (Main CLI script)
+├── main.py             (Main CLI script)
 ├── transcribe/         (Core package)
 │   ├── __init__.py
 │   ├── summarize_model.py (LLM summarization)
@@ -127,7 +127,7 @@ LOGSEQ_DIR = "files/logseq"
 The original CLI is still available:
 
 ```bash
-python transcribe.py --input_path "/path/to/video.mp4" --title "Video Title"
+python main.py --input_path "/path/to/video.mp4" --title "Video Title"
 ```
 
 ## Output Files

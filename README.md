@@ -217,7 +217,7 @@ Logs are stored in the `logs` directory:
 
 ## License
 
-[Your License] - see LICENSE file for details
+MIT
 
 ## Contributing
 

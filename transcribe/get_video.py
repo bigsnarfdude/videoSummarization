@@ -1,18 +1,16 @@
-import datetime
 import os
+from pathlib import Path
 import sys
 import subprocess
 import logging
+from typing import List, Optional
 from .utils import get_filename, slugify
+from config import settings
 
 # Configure logging
-logging.basicConfig(
-    filename='video_processing.log',
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logger = logging.getLogger(__name__)
 
-def process_video_list(list_file_path, output_path="files/audio/"):
+def process_video_list(list_file_path: str, output_path: Optional[str] = None) -> List[str]:
     """
     Process a text file containing a list of video paths.
     Each line in the file should contain one video path.
@@ -27,58 +25,77 @@ def process_video_list(list_file_path, output_path="files/audio/"):
     if not os.path.exists(list_file_path):
         raise FileNotFoundError(f"List file not found: {list_file_path}")
         
+    if output_path is None:
+        output_path = settings.OUTPUT_DIRS["audio"]
+        
     processed_files = []
     
     try:
         with open(list_file_path, 'r') as file:
             video_paths = [line.strip() for line in file if line.strip()]
             
-        logging.info(f"Found {len(video_paths)} videos to process in {list_file_path}")
+        logger.info(f"Found {len(video_paths)} videos to process in {list_file_path}")
         
         for i, video_path in enumerate(video_paths, 1):
             try:
-                logging.info(f"Processing video {i}/{len(video_paths)}: {video_path}")
+                logger.info(f"Processing video {i}/{len(video_paths)}: {video_path}")
                 wav_path = process_local_video(video_path, output_path)
                 processed_files.append(wav_path)
-                logging.info(f"Successfully processed: {video_path} -> {wav_path}")
+                logger.info(f"Successfully processed: {video_path} -> {wav_path}")
             except Exception as e:
-                logging.error(f"Error processing video {video_path}: {e}")
+                logger.error(f"Error processing video {video_path}: {e}")
                 print(f"Error processing video {video_path}: {e}")
                 continue
                 
         return processed_files
         
     except Exception as e:
-        logging.error(f"Error reading video list file: {e}")
+        logger.error(f"Error reading video list file: {e}")
         raise
 
-def process_local_video(video_path, output_path="files/audio/"):
+def process_local_video(video_path: str, output_path: Optional[str] = None) -> str:
     """
-    Processes a local video file and saves the converted audio to the given output
-    path. Returns the path to the processed wav file.
-    """
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-        logging.info(f"Created output directory: {output_path}")
+    Processes a local video file and saves the converted audio.
     
-    if not os.path.exists(video_path):
+    Args:
+        video_path: Path to the video file
+        output_path: Optional custom output path
+        
+    Returns:
+        str: Path to the processed WAV file
+    """
+    if output_path is None:
+        output_path = settings.OUTPUT_DIRS["audio"]
+        
+    if not Path(output_path).exists():
+        Path(output_path).mkdir(parents=True, exist_ok=True)
+    
+    if not Path(video_path).exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
-    original_path, original_filename = os.path.split(video_path)
-    original_file_base, file_ext = os.path.splitext(original_filename)
+    original_file_base = Path(video_path).stem
     slugified_base = slugify(original_file_base)
-    new_file_path = os.path.join(
-        output_path, f"{slugified_base}.wav"
-    )
-    convert_to_wav(video_path, new_file_path)
-    return new_file_path
+    new_file_path = Path(output_path) / f"{slugified_base}.wav"
+    
+    convert_to_wav(str(video_path), str(new_file_path))
+    return str(new_file_path)
 
-def convert_to_wav(movie_path, wav_path):
+def convert_to_wav(movie_path: str, wav_path: str) -> str:
     """
-    Converts a video file to a wav file. Returns the path to the wav file.
+    Converts a video file to a WAV file.
+    
+    Args:
+        movie_path: Path to the input video file
+        wav_path: Path where the WAV file should be saved
+        
+    Returns:
+        str: Path to the created WAV file
+        
+    Raises:
+        RuntimeError: If conversion fails
     """
     cmd = (f'ffmpeg -y -i "{movie_path}" -ar 16000 -ac 1 -c:a pcm_s16le "{wav_path}"')
-    logging.info(f"Converting to wav with command: {cmd}")
+    logger.info(f"Converting to wav with command: {cmd}")
     try:
         process = subprocess.run(
             cmd,
@@ -87,18 +104,24 @@ def convert_to_wav(movie_path, wav_path):
             capture_output=True,
             text=True
         )
-        logging.info(f"Converted video to wav: {wav_path}")
+        logger.info(f"Converted video to wav: {wav_path}")
         return wav_path
     except subprocess.CalledProcessError as e:
-        logging.error(f"Error converting video: {e.stderr}")
-        raise
+        logger.error(f"Error converting video: {e.stderr}")
+        raise RuntimeError(f"Failed to convert video: {e.stderr}")
 
-def is_video_file(filepath):
+def is_video_file(filepath: str) -> bool:
     """
     Check if the given file is a video file based on its extension.
+    
+    Args:
+        filepath: Path to the file
+        
+    Returns:
+        bool: True if file has a video extension
     """
     video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v'}
-    return os.path.splitext(filepath)[1].lower() in video_extensions
+    return Path(filepath).suffix.lower() in video_extensions
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

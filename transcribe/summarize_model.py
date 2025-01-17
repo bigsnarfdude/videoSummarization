@@ -1,51 +1,62 @@
 import os
+from pathlib import Path
+from typing import List, Optional, Dict, Any
 import spacy
 import logging
 from mlx_lm import load, generate
 
-# Constants
-SUMMARY_DIR = "files/summaries"
-MODEL_NAME = "mlx-community/phi-4-8bit"
-WINDOW_SIZE = 4096  # Adjust based on phi-4 context window
+from config import settings
 
 # Configure logging
-logging.basicConfig(
-    filename="summarization.log", 
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+logger = logging.getLogger(__name__)
 
 # Global model and tokenizer cache
-model, tokenizer = None, None
+model: Any = None
+tokenizer: Any = None
 
-def get_model_and_tokenizer():
+def get_model_and_tokenizer() -> tuple[Any, Any]:
     """Initialize or return cached model and tokenizer"""
     global model, tokenizer
     if model is None or tokenizer is None:
         try:
-            model, tokenizer = load(MODEL_NAME)
-            logging.info("MLX model loaded successfully.")
+            model, tokenizer = load(settings.MLX_MODEL_NAME)
+            logger.info("MLX model loaded successfully.")
         except Exception as e:
-            logging.error(f"Error loading MLX model: {e}")
+            logger.error(f"Error loading MLX model: {e}")
             return None, None
     return model, tokenizer
 
-def initialize_spacy():
-    """Initialize spaCy with error handling"""
+# used for splitting sentences logic
+def initialize_spacy() -> Optional[spacy.language.Language]:
+    """
+    Initialize spaCy with error handling
+    
+    Returns:
+        Optional[spacy.language.Language]: Loaded spaCy model or None if failed
+    """
     try:
         try:
             nlp = spacy.load("en_core_web_sm")
         except OSError:
-            logging.info("Downloading spacy model en_core_web_sm...")
+            logger.info("Downloading spacy model en_core_web_sm...")
             spacy.cli.download("en_core_web_sm")
             nlp = spacy.load("en_core_web_sm")
         return nlp
     except Exception as e:
-        logging.error(f"Error initializing spaCy: {e}")
+        logger.error(f"Error initializing spaCy: {e}")
         raise
 
-def create_summary_prompt(chunk, title):
-    """Create a prompt for summarization with enhanced structure for better outputs"""
+def create_summary_prompt(chunk: str, title: str) -> str:
+    """
+    Create a prompt for summarization with enhanced structure
+    
+    Args:
+        chunk: Text chunk to summarize
+        title: Title of the content
+        
+    Returns:
+        str: Formatted prompt for the model
+    """
     base_prompt = f"""You are a precise and accurate summarizer. Your task is to create a detailed summary of the following text, focusing on extracting specific facts, numbers, and key points. Follow these guidelines:
 
 1. Extract ONLY information that is explicitly stated in the text
@@ -80,22 +91,39 @@ Your precise summary:
         )
     return base_prompt
 
-def count_tokens(text):
-    """Count tokens in text using the model's tokenizer"""
+def count_tokens(text: str) -> int:
+    """
+    Count tokens in text using the model's tokenizer
+    
+    Args:
+        text: Input text to tokenize
+        
+    Returns:
+        int: Number of tokens
+    """
     model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
         return 0
     return len(tokenizer.encode(text))
 
-def split_text(text_path, title):
-    """Split text into chunks considering the model's context window"""
+def split_text(text_path: str, title: str) -> List[str]:
+    """
+    Split text into chunks considering the model's context window
+    
+    Args:
+        text_path: Path to text file
+        title: Title of the content
+        
+    Returns:
+        List[str]: List of text chunks
+    """
     model, tokenizer = get_model_and_tokenizer()
     if tokenizer is None:
         return []
 
-    # Calculate max tokens for content based on model window size
+    # Calculate max tokens for content
     prompt_tokens = count_tokens(create_summary_prompt("", title))
-    max_tokens = WINDOW_SIZE - prompt_tokens - 100  # Buffer for generation
+    max_tokens = settings.WINDOW_SIZE - prompt_tokens - 100  # Buffer for generation
 
     # Initialize spaCy
     try:
@@ -103,20 +131,20 @@ def split_text(text_path, title):
         if nlp is None:
             raise RuntimeError("Failed to initialize spaCy")
     except Exception as e:
-        logging.error(f"spaCy initialization error: {e}")
+        logger.error(f"spaCy initialization error: {e}")
         raise
 
     try:
         with open(text_path, "r", encoding="utf-8") as f:
             text = f.read()
     except Exception as e:
-        logging.error(f"Error reading text file: {e}")
+        logger.error(f"Error reading text file: {e}")
         raise
 
     # Split text into sentences
     doc = nlp(text)
-    chunks = []
-    current_chunk = []
+    chunks: List[str] = []
+    current_chunk: List[str] = []
     current_tokens = 0
 
     for sent in doc.sents:
@@ -135,11 +163,19 @@ def split_text(text_path, title):
     if current_chunk:  # Add the last chunk
         chunks.append(" ".join(current_chunk))
 
-    logging.info(f"Split text into {len(chunks)} chunks")
+    logger.info(f"Split text into {len(chunks)} chunks")
     return chunks
 
-def clean_and_format_summary(raw_summary):
-    """Clean and format the model's output for consistency"""
+def clean_and_format_summary(raw_summary: str) -> str:
+    """
+    Clean and format the model's output for consistency
+    
+    Args:
+        raw_summary: Raw model output
+        
+    Returns:
+        str: Cleaned and formatted summary
+    """
     import re
     
     # Split into lines and clean up
@@ -155,7 +191,6 @@ def clean_and_format_summary(raw_summary):
         
         # Ensure each point starts with a bullet
         if not line.startswith('•'):
-            # Handle cases where model used different bullet points or numbers
             line = re.sub(r'^[-*•]?\s*', '• ', line)
             line = re.sub(r'^\d+\.\s*', '• ', line)
         
@@ -191,11 +226,20 @@ def clean_and_format_summary(raw_summary):
         
     return result
 
-def summarize_with_mlx(chunk, title):
-    """Generate summary for a chunk using MLX model with enhanced output processing"""
+def summarize_with_mlx(chunk: str, title: str) -> Optional[str]:
+    """
+    Generate summary for a chunk using MLX model
+    
+    Args:
+        chunk: Text chunk to summarize
+        title: Title of the content
+        
+    Returns:
+        Optional[str]: Formatted summary or None if failed
+    """
     model, tokenizer = get_model_and_tokenizer()
     if model is None or tokenizer is None:
-        logging.error("Model or tokenizer not initialized")
+        logger.error("Model or tokenizer not initialized")
         return None
 
     try:
@@ -212,28 +256,49 @@ def summarize_with_mlx(chunk, title):
         formatted_summary = clean_and_format_summary(response)
         return formatted_summary
     except Exception as e:
-        logging.error(f"Error during summarization: {e}")
+        logger.error(f"Error during summarization: {e}")
         return None
 
-def summarize_in_parallel(chunks, title):
-    """Process all chunks to generate summaries"""
+def summarize_in_parallel(chunks: List[str], title: str) -> List[str]:
+    """
+    Process all chunks to generate summaries
+    
+    Args:
+        chunks: List of text chunks
+        title: Title of the content
+        
+    Returns:
+        List[str]: List of summaries
+    """
     summaries = []
     for i, chunk in enumerate(chunks):
-        logging.info(f"Processing chunk {i+1}/{len(chunks)}")
+        logger.info(f"Processing chunk {i+1}/{len(chunks)}")
         summary = summarize_with_mlx(chunk, title)
         if summary:
             summaries.append(summary)
     return summaries
 
-def save_summaries(summaries, filename_only):
-    """Save generated summaries to file"""
+def save_summaries(summaries: List[str], filename_only: str) -> str:
+    """
+    Save generated summaries to file
+    
+    Args:
+        summaries: List of summaries to save
+        filename_only: Base filename without extension
+        
+    Returns:
+        str: Path to saved summary file
+        
+    Raises:
+        RuntimeError: If no valid summaries to save
+    """
     # Check if we have any valid summaries
     valid_summaries = [s for s in summaries if s]
     if not valid_summaries:
         raise RuntimeError("No valid summaries generated to save")
 
-    os.makedirs(SUMMARY_DIR, exist_ok=True)
-    summary_path = os.path.join(SUMMARY_DIR, f"{filename_only}_summary.txt")
+    summary_path = Path(settings.OUTPUT_DIRS["summaries"]) / f"{filename_only}_summary.txt"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
         with open(summary_path, "w", encoding="utf-8") as f:
@@ -242,10 +307,10 @@ def save_summaries(summaries, filename_only):
                     f.write("\n---\n\n")
                 f.write(summary)
                 f.write("\n")
-        logging.info(f"Summary saved to: {summary_path}")
-        return summary_path
+        logger.info(f"Summary saved to: {summary_path}")
+        return str(summary_path)
     except Exception as e:
-        logging.error(f"Error saving summary: {e}")
+        logger.error(f"Error saving summary: {e}")
         raise
 
 if __name__ == "__main__":
@@ -257,7 +322,7 @@ if __name__ == "__main__":
         try:
             chunks = split_text(text_path, title)
             summaries = summarize_in_parallel(chunks, title)
-            save_summaries(summaries, os.path.splitext(os.path.basename(text_path))[0])
+            save_summaries(summaries, Path(text_path).stem)
         except Exception as e:
-            logging.error(f"Error in main: {e}")
+            logger.error(f"Error in main: {e}")
             sys.exit(1)

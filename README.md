@@ -1,235 +1,234 @@
-# Video Processing Web Application
+# Video Processing Service
 
-This project provides a web interface and REST API for transcribing and summarizing video files. It uses Whisper.cpp for transcription and MLX Phi4 for summarization, generating text summaries and Logseq-compatible Markdown notes.
+A Flask-based web application for transcribing and summarizing video content. The service extracts audio from videos, performs transcription using Whisper.cpp, and generates summaries using MLX Phi-4.
 
 ## Features
 
-- User-friendly web interface for video uploads
-- Video to audio conversion using FFmpeg
-- Speech-to-text transcription using Whisper.cpp Large V3
-- Text summarization using MLX Phi4 large language model
-- Logseq-compatible note generation
+- Web interface with drag-and-drop video upload
 - REST API for programmatic access
-- Comprehensive logging and error handling
-- Support for MP4, AVI, MOV, and MKV video formats
+- Video to audio conversion
+- Speech-to-text transcription
+- Text summarization
+- Logseq-compatible note generation
+- Comprehensive logging system
+- Support for MP4, AVI, MOV, and MKV formats
 
-## Project Structure
+## Requirements
 
-```
-.
-├── app.py              # Flask web application and API server
-├── main.py             # CLI script for direct usage
-├── templates/          # Web interface templates
-│   └── index.html      # Main web interface
-├── static/             # Static web assets
-│   └── js/
-│       └── VideoProcessor.js  # React component for video upload
-├── transcribe/         # Core package
-│   ├── __init__.py
-│   ├── summarize_model.py  # LLM summarization
-│   ├── transcribe.py      # Whisper transcription
-│   ├── get_video.py       # Video processing
-│   └── utils.py           # Utilities
-├── files/              # Generated files
-│   ├── uploads/        # Temporary video uploads
-│   ├── audio/         # Extracted audio
-│   ├── transcripts/   # Text transcripts
-│   ├── summaries/     # Generated summaries
-│   └── logseq/        # Logseq notes
-├── *.log              # Log files
-└── requirements.txt    # Dependencies
-```
+### Core Dependencies
+- Python 3.7+
+- FFmpeg
+- Whisper.cpp
+- MLX
 
-## Prerequisites
-
-- **Python 3.7+** ([python.org](https://python.org/))
-- **Whisper.cpp** ([GitHub Repository](https://github.com/ggerganov/whisper.cpp))
-  - Build and ensure the `main` executable is in your PATH
-- **FFmpeg** ([ffmpeg.org](https://ffmpeg.org/))
-  - macOS: `brew install ffmpeg`
-  - Linux: `apt-get install ffmpeg`
-  - Windows: Download from ffmpeg website
-- **MLX** (Follow MLX installation instructions)
-- **Spacy Model**:
-  ```bash
-  python -m spacy download en_core_web_sm
-  ```
+### Python Packages
+- Flask
+- Pydantic
+- MLX
+- MLX-LM
+- Spacy
+- Additional dependencies in `requirements.txt`
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd <repository-name>
+   git clone <your-repository-url>
+   cd video-processing-service
    ```
 
-2. Create and activate virtual environment:
+2. Create and activate a virtual environment:
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # Unix/macOS
+   # OR
    .venv\Scripts\activate     # Windows
    ```
 
-3. Install dependencies:
+3. Install Python dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-4. Create required directories:
+4. Install Spacy language model:
    ```bash
-   mkdir -p templates static/js files/{uploads,audio,transcripts,summaries,logseq}
+   python -m spacy download en_core_web_sm
    ```
+
+5. Install external dependencies:
+
+   **FFmpeg:**
+   - macOS: `brew install ffmpeg`
+   - Ubuntu: `sudo apt-get install ffmpeg`
+   - Windows: Download from [ffmpeg.org](https://ffmpeg.org/)
+
+   **Whisper.cpp:**
+   - Follow installation instructions at [Whisper.cpp GitHub](https://github.com/ggerganov/whisper.cpp)
+   - Download and place the model file in your preferred location
+
+   **MLX:**
+   - Follow installation instructions for your platform
+
+6. Create required directories:
+   ```bash
+   mkdir -p files/{uploads,audio,transcripts,summaries,logseq} logs
+   ```
+
+## Configuration
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Update the following settings in `.env`:
+   ```
+   APP_ENV=development
+   SECRET_KEY=your-secret-key
+   WHISPER_PATH=/path/to/whisper/executable
+   WHISPER_MODEL_PATH=/path/to/whisper/model
+   ```
+
+3. Additional configuration options are available in `config.py`:
+   - File size limits
+   - Allowed file types
+   - Processing settings
+   - Directory paths
+   - Logging configuration
 
 ## Usage
 
-### Web Interface
+### Starting the Server
 
-1. Start the Flask application:
+1. Development mode:
    ```bash
    python app.py
    ```
+   The server will start at `http://localhost:5000`
 
-2. Open your web browser and navigate to:
-   ```
-   http://localhost:5000
+2. Production mode:
+   ```bash
+   export APP_ENV=production
+   gunicorn -w 4 -b 0.0.0.0:5000 app:app
    ```
 
-3. Use the web interface to:
-   - Upload videos through drag-and-drop or file selection
-   - Monitor processing progress
-   - View and download generated files
+### Web Interface
+
+1. Open `http://localhost:5000` in your browser
+2. Upload a video using drag-and-drop or file selection
+3. Wait for processing to complete
+4. Access generated files from the results panel
 
 ### REST API
 
-The application provides the following API endpoints:
+The service provides a RESTful API for programmatic access:
 
-1. **Process Video** (`POST /api/process`)
-   ```bash
-   curl -X POST \
-     -F "file=@/path/to/video.mp4" \
-     -F "title=My Video Title" \
-     http://localhost:5000/api/process
-   ```
-
-   Response:
-   ```json
-   {
-       "status": "success",
-       "files": {
-           "audio": "video_name.wav",
-           "transcript": "video_name.txt",
-           "summary": "video_name.txt",
-           "logseq": "video_name.md"
-       }
-   }
-   ```
-
-2. **Check Status** (`GET /api/status`)
-   ```bash
-   curl http://localhost:5000/api/status
-   ```
-
-### Command Line Interface
-
-For direct command-line usage:
-
+#### Process Video
 ```bash
-python main.py --input_path "/path/to/video.mp4" --title "Video Title"
+curl -X POST \
+  -F "file=@/path/to/video.mp4" \
+  -F "title=Video Title" \
+  http://localhost:5000/api/v1/process
 ```
 
-## Output Files
+Response:
+```json
+{
+    "status": "success",
+    "files": {
+        "audio": "video_file.wav",
+        "transcript": "video_file.txt",
+        "summary": "video_file_summary.txt",
+        "logseq": "video_file.md"
+    }
+}
+```
 
-The process generates several files:
+#### Check Status
+```bash
+curl http://localhost:5000/api/v1/status
+```
+
+### Output Files
+
+The service generates several files for each processed video:
 
 1. **Audio** (`files/audio/*.wav`)
    - Extracted audio in WAV format
    - 16kHz, mono, 16-bit PCM
 
 2. **Transcript** (`files/transcripts/*.txt`)
-   - Raw text transcription
-   - Generated by Whisper.cpp
+   - Raw text transcription from Whisper
 
 3. **Summary** (`files/summaries/*.txt`)
-   - Bullet-point summary
-   - Generated by MLX Phi4
+   - Generated summary from MLX Phi-4
 
 4. **Logseq Note** (`files/logseq/*.md`)
-   - Formatted Markdown note
-   - Ready for import into Logseq
+   - Formatted note ready for Logseq import
 
-## Configuration
+## Development
 
-Key configuration settings in `app.py`:
-
-```python
-UPLOAD_FOLDER = 'files/uploads'
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
-LOG_FILE = "api.log"
-SUMMARIES_DIR = "files/summaries"
-LOGSEQ_DIR = "files/logseq"
+### Project Structure
+```
+.
+├── app.py              # Flask application
+├── config.py           # Configuration settings
+├── main.py            # CLI interface
+├── requirements.txt   # Python dependencies
+├── static/           # Static assets
+│   └── js/
+│       └── VideoProcessor.js
+├── templates/        # HTML templates
+│   └── index.html
+├── tests/           # Test suite
+└── transcribe/      # Core processing modules
 ```
 
-## Logging
+### Running Tests
+```bash
+pytest
+```
 
-The application maintains several log files:
-- `api.log`: Web interface and API logs
-- `transcribe.log`: Transcription process logs
-- `summarization.log`: Summarization process logs
-- `video_processing.log`: Video/audio conversion logs
+### Logging
+
+Logs are stored in the `logs` directory:
+- `app.log`: Application logs
+- `api.log`: API request logs
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Web Interface Not Loading**
-   - Verify Flask is running and port 5000 is available
-   - Check browser console for JavaScript errors
-   - Ensure all static files are in correct locations
-
-2. **Upload Errors**
+1. **File Upload Errors**
    - Verify file format is supported
    - Check file size limits
-   - Ensure all directories have write permissions
+   - Ensure upload directory is writable
 
-3. **Processing Errors**
-   - Check log files for detailed error messages
-   - Verify all dependencies are installed
-   - Ensure sufficient disk space
+2. **Processing Errors**
+   - Check Whisper.cpp installation
+   - Verify model paths
+   - Check FFmpeg installation
 
-### Solutions
-
-1. **Missing Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_sm
-   ```
-
-2. **Permission Issues**
+3. **Permission Issues**
    ```bash
    chmod -R 755 files/
+   chmod -R 755 logs/
    ```
 
-3. **Port Conflicts**
-   - Modify port in app.py if 5000 is in use
-   ```python
-   app.run(debug=True, host='0.0.0.0', port=5001)
-   ```
+## License
+
+[Your License] - see LICENSE file for details
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-MIT License
+3. Make your changes
+4. Run tests
+5. Submit a pull request
 
 ## Acknowledgments
 
-- Whisper.cpp project
-- MLX project
-- FFmpeg project
-- React and Flask communities
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp)
+- [MLX](https://github.com/ml-explore/mlx)
+- Flask and React communities

@@ -33,7 +33,7 @@ A Flask-based web application for transcribing and summarizing video content. Th
 
 1. Clone the repository:
    ```bash
-   git clone <your-repository-url>
+   git clone https://github.com/bigsnarfdude/videoSummarization/
    cd video-processing-service
    ```
 

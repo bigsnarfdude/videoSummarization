@@ -3,6 +3,7 @@ import os
 import logging
 import traceback
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
 from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
 
@@ -27,21 +28,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def allowed_file(filename: str) -> bool:
-    """
-    Check if the file has an allowed extension.
-    
-    Args:
-        filename: The filename to check
-        
-    Returns:
-        bool: True if file extension is allowed
-    """
-    if '.' not in filename:
-        return False
-        
-    ext = filename.rsplit('.', 1)[1].lower()
-    return ext in settings.ALLOWED_EXTENSIONS
+def init_directories():
+    """Initialize all required directories"""
+    for directory in settings.OUTPUT_DIRS.values():
+        os.makedirs(directory, exist_ok=True)
 
 def validate_file(file) -> Optional[str]:
     """
@@ -55,13 +45,25 @@ def validate_file(file) -> Optional[str]:
     """
     if not file:
         return "No file provided"
+        
     if not file.filename:
         return "No file selected"
+        
     if len(file.filename) > settings.MAX_FILENAME_LENGTH:
         return f"Filename too long (max {settings.MAX_FILENAME_LENGTH} characters)"
-    if not allowed_file(file.filename):
+        
+    if hasattr(file, 'content_length') and file.content_length > settings.MAX_FILE_SIZE:
+        return f"File size exceeds {settings.MAX_FILE_SIZE/(1024*1024)}MB limit"
+        
+    if '.' not in file.filename:
+        return "Invalid file format"
+        
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    if ext not in settings.ALLOWED_EXTENSIONS:
         return "File type not allowed"
+        
     return None
+
 
 def create_logseq_note(summary_path: Path, title: str) -> Optional[Path]:
     """
@@ -149,47 +151,68 @@ def home():
     """Render the home page"""
     return render_template('index.html')
 
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 errors"""
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.'
+    }), 404
+
+@app.errorhandler(413)
+@app.errorhandler(RequestEntityTooLarge)
+def handle_large_file(e):
+    """Handle large file upload errors"""
+    max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+    return jsonify({
+        'error': f"File size exceeds {max_mb}MB limit"
+    }), 400
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle any uncaught exception"""
+    logger.error(f"Unhandled exception: {str(e)}")
+    logger.error(traceback.format_exc())
+    
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': str(e),
+        'details': traceback.format_exc()
+    }), 500
+
 @app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
 def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
-    """
-    API endpoint to process a video file
-    
-    Returns:
-        Tuple[Dict, int]: Response data and status code
-    """
+    """Process video upload endpoint"""
     file_path = None
     try:
-        # Validate request
         if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
+            logger.error("No file in request")
+            return jsonify({'error': 'No file selected'}), 400
         
         file = request.files['file']
+        if not file.filename:
+            logger.error("Empty filename")
+            return jsonify({'error': 'No file selected'}), 400
+        
         error = validate_file(file)
         if error:
+            logger.error(f"File validation error: {error}")
             return jsonify({'error': error}), 400
 
         # Get title from form data or use filename
         title = request.form.get('title', Path(file.filename).stem)
         
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        file_path = settings.OUTPUT_DIRS["uploads"] / filename
-        file.save(file_path)
-        logger.info(f"File saved to: {file_path}")
-        
+        # Save and process file
         try:
+            filename = secure_filename(file.filename)
+            file_path = settings.OUTPUT_DIRS["uploads"] / filename
+            file.save(file_path)
+            logger.info(f"File saved to: {file_path}")
+            
             # Process the video
             result = process_video(file_path, title)
             
-            # Verify files exist and have content
-            for key, path in result.items():
-                if not path.exists():
-                    raise RuntimeError(f"Generated file {key} does not exist: {path}")
-                if path.stat().st_size == 0:
-                    raise RuntimeError(f"Generated file {key} is empty: {path}")
-                    
-            # Return paths to generated files
-            return jsonify({
+            response = {
                 'status': 'success',
                 'files': {
                     'audio': str(result['audio_path'].name),
@@ -197,7 +220,9 @@ def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
                     'summary': str(result['summary_path'].name),
                     'logseq': str(result['logseq_path'].name)
                 }
-            }), 200
+            }
+            logger.info(f"Successfully processed video. Response: {response}")
+            return jsonify(response), 200
             
         except Exception as e:
             error_details = traceback.format_exc()
@@ -208,6 +233,9 @@ def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
                 'type': type(e).__name__
             }), 500
             
+    except RequestEntityTooLarge:
+        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
     except Exception as e:
         error_details = traceback.format_exc()
         logger.error(f"API error: {error_details}")
@@ -216,9 +244,7 @@ def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
             'details': error_details,
             'type': type(e).__name__
         }), 500
-        
     finally:
-        # Clean up uploaded file
         if file_path and file_path.exists():
             try:
                 file_path.unlink()
@@ -231,7 +257,17 @@ def status() -> Tuple[Dict[str, str], int]:
     """Health check endpoint"""
     return jsonify({'status': 'running'}), 200
 
+# Initialize directories when app is imported
+init_directories()
+
+
 if __name__ == '__main__':
+    # Initialize directories when app is run directly
+    init_directories()
+    
+    # Run the Flask app
+    print(f"Starting server on {settings.HOST}:{settings.PORT}")
+    print(f"Debug mode: {settings.DEBUG}")
     app.run(
         debug=settings.DEBUG,
         host=settings.HOST,

@@ -1,4 +1,4 @@
-# Video Processing Service
+# LLM Based Video Processing Service
 
 A Flask-based web application for transcribing and summarizing video content. The service extracts audio from videos, performs transcription using Whisper.cpp, and generates summaries using MLX Phi-4.
 

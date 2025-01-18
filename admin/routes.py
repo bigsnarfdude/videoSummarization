@@ -1,15 +1,30 @@
-from flask import jsonify, render_template
+from flask import jsonify, render_template, abort
 from pathlib import Path
 import json
 from . import admin_bp
 from config import settings
+
+@admin_bp.route('/api/lecture/<lecture_name>')
+def get_lecture_stats(lecture_name):
+    """Get stats for a specific lecture"""
+    try:
+        stats_file = settings.OUTPUT_DIRS["stats"] / f"{lecture_name}_stats.json"
+        if not stats_file.exists():
+            return jsonify({'error': 'Stats not found'}), 404
+            
+        with open(stats_file, 'r', encoding='utf-8') as f:
+            stats = json.load(f)
+        return jsonify(stats)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def get_stats_data():
     """Get statistics from all stats files"""
     stats_dir = settings.OUTPUT_DIRS["stats"]
     word_counts = {"total": 0, "by_document": []}
     all_stats = []
-
+    
     try:
         for stats_file in stats_dir.glob("*_stats.json"):
             try:
@@ -24,15 +39,14 @@ def get_stats_data():
                         "name": stats['metadata']['title'],
                         "words": doc_word_count
                     })
-
             except (json.JSONDecodeError, KeyError) as e:
                 print(f"Error processing {stats_file}: {e}")
                 continue
-
+                
         # Calculate average word count
         doc_count = len(word_counts["by_document"])
         word_counts["average"] = word_counts["total"] // doc_count if doc_count > 0 else 0
-
+        
         return {
             "word_counts": word_counts,
             "total_documents": doc_count,

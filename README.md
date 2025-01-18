@@ -1,129 +1,151 @@
-# LLM Based Video Transcription and Summarization API
+# Video Transcription and Analysis Platform
 
-A Flask-based web application for transcribing and summarizing video content. The service extracts audio from videos, performs transcription using Whisper.cpp, and generates summaries using MLX Phi-4.
+A Flask-based web application that transforms video content into transcripts, summaries, and structured knowledge. The platform uses MLX for analysis, Whisper.cpp for transcription, and provides a comprehensive admin dashboard for content insights.
 
-## Features
+## Key Features
 
-- Web interface with drag-and-drop video upload
-- REST API for programmatic access
-- Video to audio conversion
-- Speech-to-text transcription
-- Text summarization
-- Logseq-compatible note generation
-- Comprehensive logging system
-- Support for MP4, AVI, MOV, and MKV formats
+- 🎥 Video Processing
+  - Supports MP4, AVI, MOV, and MKV formats
+  - Automatic audio extraction
+  - High-accuracy transcription using Whisper.cpp
 
-## Requirements
+- 📊 Content Analysis
+  - Text summarization using MLX Phi-4 model
+  - Topic and concept extraction
+  - Mathematical content analysis
+  - Complexity scoring
+  - Auto-generated Logseq notes
 
-### Core Dependencies
-- Python 3.7+
+- 📈 Admin Dashboard
+  - Real-time processing statistics
+  - Word count analytics
+  - Topic and concept visualization
+  - Content trend analysis
+
+## Prerequisites
+
+- Python 3.9+
 - FFmpeg
 - Whisper.cpp
 - MLX
 
-### Python Packages
-- Flask
-- Pydantic
-- MLX
-- MLX-LM
-- Spacy
-- Additional dependencies in `requirements.txt`
-
 ## Installation
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/bigsnarfdude/videoSummarization/
-   cd videoSummarization
-   ```
+```bash
+git clone https://github.com/yourusername/videoSummarization.git
+cd videoSummarization
+```
 
-2. Create and activate a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Unix/macOS
-   # OR
-   .venv\Scripts\activate     # Windows
-   ```
+2. Create and activate virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # Unix/macOS
+# OR
+venv\Scripts\activate     # Windows
+```
 
 3. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+```
 
-4. Install Spacy language model:
-   ```bash
-   python -m spacy download en_core_web_sm
-   ```
+4. Install external dependencies:
 
-5. Install external dependencies:
+FFmpeg:
+```bash
+# macOS
+brew install ffmpeg
 
-   **FFmpeg:**
-   - macOS: `brew install ffmpeg`
-   - Ubuntu: `sudo apt-get install ffmpeg`
-   - Windows: Download from [ffmpeg.org](https://ffmpeg.org/)
+# Ubuntu
+sudo apt-get install ffmpeg
 
-   **Whisper.cpp:**
-   - Follow installation instructions at [Whisper.cpp GitHub](https://github.com/ggerganov/whisper.cpp)
-   - Download and place the model file in your preferred location
+# Windows
+# Download from ffmpeg.org
+```
 
-   **MLX:**
-   - Follow installation instructions for your platform
+Whisper.cpp:
+```bash
+git clone https://github.com/ggerganov/whisper.cpp.git
+cd whisper.cpp
+make
+# Download model: large-v3
+bash ./models/download-ggml-model.sh large-v3
+```
+
+5. Configure environment:
+```bash
+cp .env.example .env
+```
+
+Edit .env to set:
+```env
+SECRET_KEY=your-secret-key
+WHISPER_PATH=/path/to/whisper/executable
+WHISPER_MODEL_PATH=/path/to/whisper/model
+MLX_MODEL_NAME=mlx-community/phi-4-8bit
+```
 
 6. Create required directories:
-   ```bash
-   mkdir -p files/{uploads,audio,transcripts,summaries,logseq} logs
-   ```
+```bash
+mkdir -p files/{uploads,audio,transcripts,summaries,logseq,stats} logs
+```
 
-## Configuration
+## Project Structure
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Update the following settings in `.env`:
-   ```
-   APP_ENV=development
-   SECRET_KEY=your-secret-key
-   WHISPER_PATH=/path/to/whisper/executable
-   WHISPER_MODEL_PATH=/path/to/whisper/model
-   ```
-
-3. Additional configuration options are available in `config.py`:
-   - File size limits
-   - Allowed file types
-   - Processing settings
-   - Directory paths
-   - Logging configuration
+```
+videoSummarization/
+├── admin/                 # Admin dashboard
+│   ├── api_routes.py     # API endpoints
+│   ├── lecture_stats.py  # Statistics tracking
+│   └── math_analytics.py # Content analysis
+├── transcribe/           # Core processing
+│   ├── get_video.py     # Video handling
+│   ├── processor.py     # Main processing
+│   ├── summarize_model.py # MLX integration
+│   ├── transcribe.py    # Whisper integration
+│   └── utils.py         # Utilities
+├── templates/           # Frontend templates
+├── static/             # Static assets
+├── app.py             # Flask application
+├── config.py          # Configuration
+└── requirements.txt   # Dependencies
+```
 
 ## Usage
 
 ### Starting the Server
 
-1. Development mode:
-   ```bash
-   python app.py
-   ```
-   The server will start at `http://localhost:5000`
+Development mode:
+```bash
+python app.py
+```
 
-2. Production mode:
-   ```bash
-   export APP_ENV=production
-   gunicorn -w 4 -b 0.0.0.0:5000 app:app
-   ```
+Production mode:
+```bash
+export APP_ENV=production
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+```
 
 ### Web Interface
 
-1. Open `http://localhost:5000` in your browser
-2. Upload a video using drag-and-drop or file selection
-3. Wait for processing to complete
-4. Access generated files from the results panel
+1. Access `http://localhost:5000`
+2. Upload video through drag-and-drop or file selection
+3. Wait for processing completion
+4. Access generated files and insights
 
-### REST API
+### Admin Dashboard
 
-The service provides a RESTful API for programmatic access:
+1. Access `http://localhost:5000/admin`
+2. View statistics and analytics:
+   - Word count distribution
+   - Topic categorization
+   - Content trends
+   - Processing metrics
 
-#### Process Video
+### API Endpoints
+
+Process video:
 ```bash
 curl -X POST \
   -F "file=@/path/to/video.mp4" \
@@ -131,83 +153,55 @@ curl -X POST \
   http://localhost:5000/api/v1/process
 ```
 
-Response:
-```json
-{
-    "status": "success",
-    "files": {
-        "audio": "video_file.wav",
-        "transcript": "video_file.txt",
-        "summary": "video_file_summary.txt",
-        "logseq": "video_file.md"
-    }
-}
-```
-
-#### Check Status
+Check status:
 ```bash
 curl http://localhost:5000/api/v1/status
 ```
 
-### Output Files
+## Output Files
 
-The service generates several files for each processed video:
+The platform generates several files for each processed video:
 
-1. **Audio** (`files/audio/*.wav`)
-   - Extracted audio in WAV format
-   - 16kHz, mono, 16-bit PCM
-
-2. **Transcript** (`files/transcripts/*.txt`)
-   - Raw text transcription from Whisper
-
-3. **Summary** (`files/summaries/*.txt`)
-   - Generated summary from MLX Phi-4
-
-4. **Logseq Note** (`files/logseq/*.md`)
-   - Formatted note ready for Logseq import
+- `files/audio/*.wav`: Extracted audio (16kHz, mono)
+- `files/transcripts/*.txt`: Raw transcriptions
+- `files/summaries/*.txt`: Generated summaries
+- `files/logseq/*.md`: Logseq-compatible notes
+- `files/stats/*.json`: Processing statistics and analysis
 
 ## Development
-
-### Project Structure
-```
-.
-├── app.py              # Flask application
-├── config.py           # Configuration settings
-├── main.py            # CLI interface
-├── requirements.txt   # Python dependencies
-├── static/           # Static assets
-│   └── js/
-│       └── VideoProcessor.js
-├── templates/        # HTML templates
-│   └── index.html
-├── tests/           # Test suite
-└── transcribe/      # Core processing modules
-```
 
 ### Running Tests
 ```bash
 pytest
 ```
 
-### Logging
+### Code Style
+```bash
+flake8 .
+black .
+```
 
-Logs are stored in the `logs` directory:
-- `app.log`: Application logs
-- `api.log`: API request logs
+### Adding New Features
+
+1. Create feature branch
+2. Add tests
+3. Implement feature
+4. Update documentation
+5. Submit pull request
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **File Upload Errors**
-   - Verify file format is supported
-   - Check file size limits
-   - Ensure upload directory is writable
+   - Check file size limits in config.py
+   - Verify allowed file types
+   - Ensure upload directory permissions
 
 2. **Processing Errors**
-   - Check Whisper.cpp installation
-   - Verify model paths
-   - Check FFmpeg installation
+   - Verify Whisper.cpp installation
+   - Check model paths
+   - Monitor logs/app.log
 
 3. **Permission Issues**
    ```bash
@@ -215,20 +209,26 @@ Logs are stored in the `logs` directory:
    chmod -R 755 logs/
    ```
 
-## License
-
-MIT
+4. **MLX Model Issues**
+   - Verify model availability
+   - Check internet connection
+   - Monitor system resources
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
+2. Create feature branch
+3. Commit changes
 4. Run tests
-5. Submit a pull request
+5. Submit pull request
+
+## License
+
+MIT
 
 ## Acknowledgments
 
-- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp)
-- [MLX](https://github.com/ml-explore/mlx)
-- Flask and React communities
+- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for transcription
+- [MLX](https://github.com/ml-explore/mlx) for analysis
+- [Flask](https://flask.palletsprojects.com/) framework
+- [Tailwind CSS](https://tailwindcss.com/) for styling

@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="p-6 max-w-6xl mx-auto">
+    <h1 class="text-2xl font-bold mb-6">Admin Analytics Dashboard</h1>
+    
+    <!-- Tabs -->
+    <div class="mb-6">
+        <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button 
+                    class="tab-button active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
+                    data-tab="word-stats">
+                    Word Statistics
+                </button>
+                <button 
+                    class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    data-tab="category-tags">
+                    Category Tags
+                </button>
+                <button 
+                    class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                    data-tab="trends">
+                    Trends
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Word Statistics Tab -->
+    <div id="word-stats" class="tab-content active">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-medium">Total Word Count</h3>
+                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <div class="text-2xl font-bold" id="totalWordCount">-</div>
+                <p class="text-xs text-gray-500">across all documents</p>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-medium">Average Words per Document</h3>
+                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                </div>
+                <div class="text-2xl font-bold" id="averageWordCount">-</div>
+                <p class="text-xs text-gray-500">words per document</p>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-medium">Document Count</h3>
+                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 12H4"></path>
+                        <path d="M20 6H4"></path>
+                        <path d="M20 18H4"></path>
+                    </svg>
+                </div>
+                <div class="text-2xl font-bold" id="documentCount">-</div>
+                <p class="text-xs text-gray-500">total documents</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <h3 class="text-lg font-semibold mb-4">Word Count Distribution</h3>
+            <div class="h-64">
+                <canvas id="wordCountChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Category Tags Tab -->
+    <div id="category-tags" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Top 10 Category Tags</h3>
+                <span class="text-sm text-gray-500" id="totalCategories">0 categories</span>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-4" id="categoryTags">
+                <!-- Category tags will be inserted here -->
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-lg font-semibold mb-4">Category Distribution</h3>
+            <div class="h-64">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trends Tab -->
+    <div id="trends" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow p-4">
+            <h3 class="text-lg font-semibold mb-4">Monthly Word Count Trends</h3>
+            <div class="h-64">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tab Switching Logic
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    function switchTab(tabId) {
+        // Update button states
+        tabButtons.forEach(button => {
+            if (button.dataset.tab === tabId) {
+                button.classList.add('border-blue-500', 'text-blue-600');
+                button.classList.remove('border-transparent', 'text-gray-500');
+            } else {
+                button.classList.remove('border-blue-500', 'text-blue-600');
+                button.classList.add('border-transparent', 'text-gray-500');
+            }
+        });
+
+        // Update content visibility
+        tabContents.forEach(content => {
+            if (content.id === tabId) {
+                content.classList.remove('hidden');
+            } else {
+                content.classList.add('hidden');
+            }
+        });
+    }
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            switchTab(button.dataset.tab);
+        });
+    });
+
+    // Format numbers with commas
+    function formatNumber(num) {
+        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+
+    // Update dashboard with new data
+    function updateDashboard(data) {
+        // Update word count stats
+        document.getElementById('totalWordCount').textContent = formatNumber(data.word_counts.total);
+        document.getElementById('averageWordCount').textContent = formatNumber(data.word_counts.average);
+        document.getElementById('documentCount').textContent = data.word_counts.by_document.length;
+        document.getElementById('totalCategories').textContent = `${data.category_tags.length} categories`;
+
+        // Word count chart
+        new Chart(document.getElementById('wordCountChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.word_counts.by_document.map(doc => doc.name),
+                datasets: [{
+                    label: 'Word Count',
+                    data: data.word_counts.by_document.map(doc => doc.words),
+                    backgroundColor: '#4f46e5',
+                    borderColor: '#4338ca',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Category distribution chart
+        new Chart(document.getElementById('categoryChart').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: data.category_tags.map(tag => tag.name),
+                datasets: [{
+                    data: data.category_tags.map(tag => tag.count),
+                    backgroundColor: [
+                        '#4f46e5', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6',
+                        '#10b981', '#84cc16', '#eab308', '#f59e0b', '#f97316'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Category tags grid
+        document.getElementById('categoryTags').innerHTML = data.category_tags
+            .map((tag, index) => `
+                <div class="flex flex-col items-center text-center p-2 rounded-lg bg-gray-50">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-2">
+                        #${index + 1}
+                    </span>
+                    <div class="font-medium text-sm">${tag.name}</div>
+                    <div class="text-xs text-gray-500">${tag.count} docs</div>
+                </div>
+            `)
+            .join('');
+
+        // Trends chart (mock data - replace with real data)
+        new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                    label: 'Monthly Word Count',
+                    data: [12000, 15000, 18000, 16000, 22000, 25000],
+                    borderColor: '#4f46e5',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }
+
+    // Fetch dashboard data
+    fetch('/admin/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            updateDashboard(data);
+        })
+        .catch(error => {
+            console.error('Error fetching dashboard data:', error);
+            alert('Error loading dashboard data. Please try again later.');
+        });
+});
+</script>
+{% endblock %}

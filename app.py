@@ -1,17 +1,19 @@
 from flask import Flask, request, jsonify, render_template
-import os
 import logging
 import traceback
+import os
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
-from typing import Optional, Dict, Any, Tuple
 from pathlib import Path
+from typing import Dict, Optional, Tuple, Any
 
 from config import settings
-from transcribe.summarize_model import save_summaries, split_text, summarize_in_parallel
-from transcribe.transcribe import transcribe
+from transcribe.processor import process_video
+from admin.api_routes import api_bp
+from admin import admin_bp
 from transcribe.get_video import process_local_video
-from transcribe.utils import get_filename
+from transcribe.transcribe import transcribe
+
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -20,6 +22,10 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE
 app.config['SECRET_KEY'] = settings.SECRET_KEY
 
+# Register blueprints
+app.register_blueprint(admin_bp)
+app.register_blueprint(api_bp)
+
 # Configure logging
 logging.basicConfig(
     filename=settings.LOG_FILE,
@@ -27,6 +33,79 @@ logging.basicConfig(
     format=settings.LOG_FORMAT
 )
 logger = logging.getLogger(__name__)
+
+@app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
+def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
+    """Process video upload endpoint"""
+    file_path = None
+    try:
+        if 'file' not in request.files:
+            logger.error("No file in request")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['file']
+        if not file.filename:
+            logger.error("Empty filename")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        error = validate_file(file)
+        if error:
+            logger.error(f"File validation error: {error}")
+            return jsonify({'error': error}), 400
+
+        # Get title from form data or use filename
+        title = request.form.get('title', Path(file.filename).stem)
+        
+        # Save and process file
+        try:
+            filename = secure_filename(file.filename)
+            file_path = settings.OUTPUT_DIRS["uploads"] / filename
+            file.save(file_path)
+            logger.info(f"File saved to: {file_path}")
+            
+            # Process the video
+            result = process_video(file_path, title)
+            
+            response = {
+                'status': 'success',
+                'files': {
+                    'audio': str(result['audio_path'].name),
+                    'transcript': str(result['transcript_path'].name),
+                    'summary': str(result['summary_path'].name),
+                    'logseq': str(result['logseq_path'].name)
+                }
+            }
+            logger.info(f"Successfully processed video. Response: {response}")
+            return jsonify(response), 200
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            logger.error(f"Processing error: {error_details}")
+            return jsonify({
+                'error': str(e),
+                'details': error_details,
+                'type': type(e).__name__
+            }), 500
+            
+    except RequestEntityTooLarge:
+        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
+    except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error(f"API error: {error_details}")
+        return jsonify({
+            'error': str(e),
+            'details': error_details,
+            'type': type(e).__name__
+        }), 500
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"Cleaned up uploaded file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error cleaning up file {file_path}: {e}")
+
 
 def init_directories():
     """Initialize all required directories"""
@@ -179,78 +258,6 @@ def handle_exception(e):
         'message': str(e),
         'details': traceback.format_exc()
     }), 500
-
-@app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
-def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
-    """Process video upload endpoint"""
-    file_path = None
-    try:
-        if 'file' not in request.files:
-            logger.error("No file in request")
-            return jsonify({'error': 'No file selected'}), 400
-        
-        file = request.files['file']
-        if not file.filename:
-            logger.error("Empty filename")
-            return jsonify({'error': 'No file selected'}), 400
-        
-        error = validate_file(file)
-        if error:
-            logger.error(f"File validation error: {error}")
-            return jsonify({'error': error}), 400
-
-        # Get title from form data or use filename
-        title = request.form.get('title', Path(file.filename).stem)
-        
-        # Save and process file
-        try:
-            filename = secure_filename(file.filename)
-            file_path = settings.OUTPUT_DIRS["uploads"] / filename
-            file.save(file_path)
-            logger.info(f"File saved to: {file_path}")
-            
-            # Process the video
-            result = process_video(file_path, title)
-            
-            response = {
-                'status': 'success',
-                'files': {
-                    'audio': str(result['audio_path'].name),
-                    'transcript': str(result['transcript_path'].name),
-                    'summary': str(result['summary_path'].name),
-                    'logseq': str(result['logseq_path'].name)
-                }
-            }
-            logger.info(f"Successfully processed video. Response: {response}")
-            return jsonify(response), 200
-            
-        except Exception as e:
-            error_details = traceback.format_exc()
-            logger.error(f"Processing error: {error_details}")
-            return jsonify({
-                'error': str(e),
-                'details': error_details,
-                'type': type(e).__name__
-            }), 500
-            
-    except RequestEntityTooLarge:
-        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
-        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
-    except Exception as e:
-        error_details = traceback.format_exc()
-        logger.error(f"API error: {error_details}")
-        return jsonify({
-            'error': str(e),
-            'details': error_details,
-            'type': type(e).__name__
-        }), 500
-    finally:
-        if file_path and file_path.exists():
-            try:
-                file_path.unlink()
-                logger.info(f"Cleaned up uploaded file: {file_path}")
-            except Exception as e:
-                logger.error(f"Error cleaning up file {file_path}: {e}")
 
 @app.route(f'{settings.API_PREFIX}/status', methods=['GET'])
 def status() -> Tuple[Dict[str, str], int]:

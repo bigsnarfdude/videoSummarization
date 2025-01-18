@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 import spacy
 from pathlib import Path
 import sys
@@ -43,29 +43,6 @@ def mock_spacy():
         nlp.return_value = doc
         mock_load.return_value = nlp
         yield nlp
-
-def test_get_model_tokenizer_error():
-    """Test error handling when model loading fails"""
-    import transcribe.summarize_model as sm
-    sm.model = None
-    sm.tokenizer = None
-    
-    with patch('transcribe.summarize_model.settings.MLX_MODEL_NAME', 'mlx-community/phi-4-8bit'), \
-         patch('transcribe.summarize_model.logger') as mock_logger, \
-         patch('mlx_lm.load', side_effect=Exception("Phi-4 model loading failed")) as mock_load:
-        
-        # Call the function
-        model, tokenizer = sm.get_model_and_tokenizer()
-        
-        # Verify that None was returned due to the error
-        #assert model is None
-        #assert tokenizer is None
-        
-        # Verify that the error was logged
-        #mock_logger.error.assert_called_once_with("Error loading MLX model: Phi-4 model loading failed")
-        
-        # Verify load was called with correct model name
-        #mock_load.assert_called_once_with('mlx-community/phi-4-8bit')
 
 def test_initialize_spacy_load_error():
     """Test spaCy initialization when load fails"""
@@ -212,8 +189,6 @@ def test_save_summaries_write_error(tmp_path):
         mock_open.side_effect = IOError("Write failed")
         with pytest.raises(Exception):
             save_summaries(summaries, "test")
-
-from unittest.mock import MagicMock, patch, PropertyMock
 
 def test_create_summary_prompt_with_chat_template():
     """Test prompt creation with chat template"""

@@ -44,7 +44,8 @@ class Settings(BaseSettings):
         "audio": BASE_DIR / "files/audio",
         "transcripts": BASE_DIR / "files/transcripts",
         "summaries": BASE_DIR / "files/summaries",
-        "logseq": BASE_DIR / "files/logseq"
+        "logseq": BASE_DIR / "files/logseq",
+        "stats": BASE_DIR / "files/stats"
     }
     
     # Logging configuration

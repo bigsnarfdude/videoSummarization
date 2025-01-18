@@ -118,6 +118,10 @@ const VideoProcessor = () => {
                 )
             ),
 
+
+
+
+
             // Selected File
             selectedFile && React.createElement('div', { className: 'mt-4' },
                 React.createElement('div', { className: 'flex items-center gap-2 text-sm text-gray-600' },
@@ -166,6 +170,7 @@ const VideoProcessor = () => {
             )
         ),
 
+
         // Results
         results && React.createElement('div', { className: 'bg-white rounded-lg shadow p-6' },
             React.createElement('h3', { className: 'text-lg font-semibold mb-4' }, 'Processing Results'),
@@ -173,7 +178,9 @@ const VideoProcessor = () => {
                 Object.entries(results).map(([type, filename]) =>
                     React.createElement('div', { key: type, className: 'flex items-center gap-2' },
                         React.createElement('svg', {
-                            className: 'h-4 w-4 text-green-600',
+                            className: `h-4 w-4 ${
+                                type === 'stats' ? 'text-purple-600' : 'text-green-600'
+                            }`,
                             fill: 'none',
                             viewBox: '0 0 24 24',
                             stroke: 'currentColor'
@@ -182,7 +189,9 @@ const VideoProcessor = () => {
                                 strokeLinecap: 'round',
                                 strokeLinejoin: 'round',
                                 strokeWidth: 2,
-                                d: 'M5 13l4 4L19 7'
+                                d: type === 'stats' 
+                                    ? 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
+                                    : 'M5 13l4 4L19 7'
                             })
                         ),
                         React.createElement('span', { className: 'text-sm font-medium capitalize' },

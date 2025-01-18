@@ -1,12 +1,31 @@
-from flask import Flask, request, jsonify, render_template
-import logging
-import traceback
 import os
+import sys
+from pathlib import Path
+import logging
+import logging.handlers
+import traceback
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
-from pathlib import Path
 from typing import Dict, Optional, Tuple, Any
+from flask import Flask, request, jsonify, render_template
 
+# First, ensure required directories exist
+def init_directories():
+    """Initialize all required directories including logs"""
+    # Create logs directory first
+    log_dir = Path('logs')
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Set proper permissions
+    try:
+        log_dir.chmod(0o755)  # rwxr-xr-x
+    except Exception as e:
+        print(f"Warning: Could not set log directory permissions: {e}")
+
+# Initialize directories before importing settings or other modules
+init_directories()
+
+# Now import settings and other modules
 from config import settings
 from transcribe.processor import process_video
 from admin.api_routes import api_bp
@@ -20,10 +39,52 @@ from transcribe.summarize_model import (
 )
 from transcribe.utils import get_filename
 
+def setup_logging():
+    """Configure application logging with rotation and proper permissions"""
+    try:
+        # Create logs directory if it doesn't exist
+        log_dir = Path(settings.LOG_FILE).parent
+        os.makedirs(log_dir, exist_ok=True)
+
+        # Configure root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+        # Create rotating file handler
+        file_handler = logging.handlers.RotatingFileHandler(
+            settings.LOG_FILE,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
+
+        # Create console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
+
+        # Add handlers to root logger
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+
+        # Test logging
+        logger = logging.getLogger(__name__)
+        logger.info("Logging initialized successfully")
+        
+        # Set proper permissions for log file
+        try:
+            Path(settings.LOG_FILE).chmod(0o644)  # rw-r--r--
+        except Exception as e:
+            logger.warning(f"Could not set log file permissions: {e}")
+
+    except Exception as e:
+        print(f"Error setting up logging: {e}", file=sys.stderr)
+        raise
+
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure app from settings
+# Configure app
 app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE
 app.config['SECRET_KEY'] = settings.SECRET_KEY
 
@@ -31,91 +92,9 @@ app.config['SECRET_KEY'] = settings.SECRET_KEY
 app.register_blueprint(admin_bp)
 app.register_blueprint(api_bp)
 
-# Configure logging
-logging.basicConfig(
-    filename=settings.LOG_FILE,
-    level=getattr(logging, settings.LOG_LEVEL),
-    format=settings.LOG_FORMAT
-)
+# Set up logging
+setup_logging()
 logger = logging.getLogger(__name__)
-
-@app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
-def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
-    """Process video upload endpoint"""
-    file_path = None
-    try:
-        if 'file' not in request.files:
-            logger.error("No file in request")
-            return jsonify({'error': 'No file selected'}), 400
-        
-        file = request.files['file']
-        if not file.filename:
-            logger.error("Empty filename")
-            return jsonify({'error': 'No file selected'}), 400
-        
-        error = validate_file(file)
-        if error:
-            logger.error(f"File validation error: {error}")
-            return jsonify({'error': error}), 400
-
-        # Get title from form data or use filename
-        title = request.form.get('title', Path(file.filename).stem)
-        
-        # Save and process file
-        try:
-            filename = secure_filename(file.filename)
-            file_path = settings.OUTPUT_DIRS["uploads"] / filename
-            file.save(file_path)
-            logger.info(f"File saved to: {file_path}")
-            
-            # Process the video
-            result = process_video(file_path, title)
-            
-            response = {
-                'status': 'success',
-                'files': {
-                    'audio': str(result['audio_path'].name),
-                    'transcript': str(result['transcript_path'].name),
-                    'summary': str(result['summary_path'].name),
-                    'logseq': str(result['logseq_path'].name)
-                }
-            }
-            logger.info(f"Successfully processed video. Response: {response}")
-            return jsonify(response), 200
-            
-        except Exception as e:
-            error_details = traceback.format_exc()
-            logger.error(f"Processing error: {error_details}")
-            return jsonify({
-                'error': str(e),
-                'details': error_details,
-                'type': type(e).__name__
-            }), 500
-            
-    except RequestEntityTooLarge:
-        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
-        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
-    except Exception as e:
-        error_details = traceback.format_exc()
-        logger.error(f"API error: {error_details}")
-        return jsonify({
-            'error': str(e),
-            'details': error_details,
-            'type': type(e).__name__
-        }), 500
-    finally:
-        if file_path and file_path.exists():
-            try:
-                file_path.unlink()
-                logger.info(f"Cleaned up uploaded file: {file_path}")
-            except Exception as e:
-                logger.error(f"Error cleaning up file {file_path}: {e}")
-
-
-def init_directories():
-    """Initialize all required directories"""
-    for directory in settings.OUTPUT_DIRS.values():
-        os.makedirs(directory, exist_ok=True)
 
 def validate_file(file) -> Optional[str]:
     """
@@ -148,6 +127,123 @@ def validate_file(file) -> Optional[str]:
         
     return None
 
+@app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
+def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
+    """Process video upload endpoint"""
+    file_path = None
+    try:
+        if 'file' not in request.files:
+            logger.error("No file in request")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        file = request.files['file']
+        if not file.filename:
+            logger.error("Empty filename")
+            return jsonify({'error': 'No file selected'}), 400
+        
+        error = validate_file(file)
+        if error:
+            logger.error(f"File validation error: {error}")
+            return jsonify({'error': error}), 400
+
+        # Get title from form data or use filename
+        title = request.form.get('title', Path(file.filename).stem)
+        
+        # Save and process file
+        try:
+            filename = secure_filename(file.filename)
+            file_path = settings.OUTPUT_DIRS["uploads"] / filename
+            logger.info(f"Saving uploaded file to: {file_path}")
+            file.save(file_path)
+            logger.info(f"File saved successfully: {file_path}")
+            
+            # Process the video
+            logger.info(f"Starting video processing for: {filename}")
+            result = process_video(file_path, title)
+            
+            response = {
+                'status': 'success',
+                'files': {
+                    'audio': str(result['audio_path'].name),
+                    'transcript': str(result['transcript_path'].name),
+                    'summary': str(result['summary_path'].name),
+                    'logseq': str(result['logseq_path'].name),
+                    'stats': f"{Path(result['transcript_path']).stem}_stats.json"
+                }
+            }
+            logger.info(f"Successfully processed video. Response: {response}")
+            return jsonify(response), 200
+            
+        except Exception as e:
+            error_details = traceback.format_exc()
+            logger.error(f"Processing error: {error_details}")
+            return jsonify({
+                'error': str(e),
+                'details': error_details,
+                'type': type(e).__name__
+            }), 500
+            
+    except RequestEntityTooLarge:
+        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+        logger.error(f"File size exceeds limit: {max_mb}MB")
+        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
+    except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error(f"API error: {error_details}")
+        return jsonify({
+            'error': str(e),
+            'details': error_details,
+            'type': type(e).__name__
+        }), 500
+    finally:
+        # Clean up uploaded file
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"Cleaned up uploaded file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error cleaning up file {file_path}: {e}")
+
+@app.route('/')
+def home():
+    """Render the home page"""
+    return render_template('index.html')
+
+@app.route(f'{settings.API_PREFIX}/status', methods=['GET'])
+def status() -> Tuple[Dict[str, str], int]:
+    """Health check endpoint"""
+    return jsonify({'status': 'running'}), 200
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 errors"""
+    logger.warning(f"404 error: {request.url}")
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.'
+    }), 404
+
+@app.errorhandler(413)
+@app.errorhandler(RequestEntityTooLarge)
+def handle_large_file(e):
+    """Handle large file upload errors"""
+    max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+    logger.warning(f"File size exceeded {max_mb}MB limit")
+    return jsonify({
+        'error': f"File size exceeds {max_mb}MB limit"
+    }), 400
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle any uncaught exception"""
+    logger.error(f"Unhandled exception: {str(e)}")
+    logger.error(traceback.format_exc())
+    
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': str(e),
+        'details': traceback.format_exc()
+    }), 500
 
 def create_logseq_note(summary_path: Path, title: str) -> Optional[Path]:
     """
@@ -182,104 +278,14 @@ def create_logseq_note(summary_path: Path, title: str) -> Optional[Path]:
         logger.error(f"Error writing Logseq note: {e}")
         return None
 
-def process_video(file_path: Path, title: str) -> Dict[str, Path]:
-    """
-    Process a video file and return all generated file paths
-    
-    Args:
-        file_path: Path to the video file
-        title: Title of the video
-        
-    Returns:
-        Dict[str, Path]: Paths to all generated files
-        
-    Raises:
-        RuntimeError: If any processing step fails
-    """
-    try:
-        # Convert video to audio
-        audio_path = process_local_video(file_path)
-        logger.info(f"Audio extracted to: {audio_path}")
-
-        # Transcribe audio
-        elapsed_time, _, transcript_path = transcribe(audio_path)
-        logger.info(f"Audio transcribed in {elapsed_time} seconds")
-
-        # Generate summary
-        chunks = split_text(text_path=transcript_path, title=title)
-        logger.info(f"Found {len(chunks)} chunks. Summarizing...")
-        
-        summaries = summarize_in_parallel(chunks, title)
-        summary_path = save_summaries(summaries, get_filename(transcript_path))
-        logger.info(f"Summary saved at {summary_path}")
-
-        # Create Logseq note
-        logseq_path = create_logseq_note(Path(summary_path), title)
-        if not logseq_path:
-            raise RuntimeError("Failed to create Logseq note")
-        
-        return {
-            'audio_path': Path(audio_path),
-            'transcript_path': Path(transcript_path),
-            'summary_path': Path(summary_path),
-            'logseq_path': logseq_path
-        }
-
-    except Exception as e:
-        logger.error(f"Error processing video: {e}")
-        logger.error(traceback.format_exc())
-        raise
-
-@app.route('/')
-def home():
-    """Render the home page"""
-    return render_template('index.html')
-
-@app.errorhandler(404)
-def not_found_error(error):
-    """Handle 404 errors"""
-    return jsonify({
-        'error': 'Not Found',
-        'message': 'The requested URL was not found on the server.'
-    }), 404
-
-@app.errorhandler(413)
-@app.errorhandler(RequestEntityTooLarge)
-def handle_large_file(e):
-    """Handle large file upload errors"""
-    max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
-    return jsonify({
-        'error': f"File size exceeds {max_mb}MB limit"
-    }), 400
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    """Handle any uncaught exception"""
-    logger.error(f"Unhandled exception: {str(e)}")
-    logger.error(traceback.format_exc())
-    
-    return jsonify({
-        'error': 'Internal Server Error',
-        'message': str(e),
-        'details': traceback.format_exc()
-    }), 500
-
-@app.route(f'{settings.API_PREFIX}/status', methods=['GET'])
-def status() -> Tuple[Dict[str, str], int]:
-    """Health check endpoint"""
-    return jsonify({'status': 'running'}), 200
-
-# Initialize directories when app is imported
-init_directories()
-
-
 if __name__ == '__main__':
-    # Initialize directories when app is run directly
-    init_directories()
+    # Initialize all directories
+    for directory in settings.OUTPUT_DIRS.values():
+        os.makedirs(directory, exist_ok=True)
     
-    # Run the Flask app
-    print(f"Starting server on {settings.HOST}:{settings.PORT}")
-    print(f"Debug mode: {settings.DEBUG}")
+    logger.info(f"Starting server on {settings.HOST}:{settings.PORT}")
+    logger.info(f"Debug mode: {settings.DEBUG}")
+    
     app.run(
         debug=settings.DEBUG,
         host=settings.HOST,

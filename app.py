@@ -25,6 +25,9 @@ OLLAMA_BASE_URL = 'http://localhost:11434'
 OLLAMA_TIMEOUT = 120  # Increased timeout for model operations
 OLLAMA_RETRY_ATTEMPTS = 3
 
+
+
+
 def init_directories():
     """Initialize all required directories including logs"""
     log_dir = Path('logs')
@@ -37,9 +40,11 @@ def init_directories():
 # Initialize directories before importing settings
 init_directories()
 
+
 def setup_logging():
     """Configure application logging with rotation and proper permissions"""
     try:
+        # Application logs
         log_dir = Path(settings.LOG_FILE).parent
         os.makedirs(log_dir, exist_ok=True)
 
@@ -48,7 +53,7 @@ def setup_logging():
 
         file_handler = logging.handlers.RotatingFileHandler(
             settings.LOG_FILE,
-            maxBytes=10*1024*1024,
+            maxBytes=10 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8'
         )
@@ -68,6 +73,19 @@ def setup_logging():
         except Exception as e:
             logger.warning(f"Could not set log file permissions: {e}")
 
+        # Chat logs
+        chat_logger = logging.getLogger('chat')
+        chat_logger.setLevel(logging.INFO)
+
+        chat_file_handler = logging.handlers.RotatingFileHandler(
+            'chat.log',
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8'
+        )
+        chat_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        chat_logger.addHandler(chat_file_handler)
+
     except Exception as e:
         print(f"Error setting up logging: {e}", file=sys.stderr)
         raise
@@ -85,6 +103,7 @@ app.register_blueprint(api_bp)
 # Set up logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
 
 # Use transcripts directory from settings
 TRANSCRIPTS_DIR = settings.OUTPUT_DIRS["transcripts"]
@@ -242,7 +261,17 @@ def chat_with_ollama():
         context = data.get('context', '')
 
         prompt = prepare_context(history, context, str(query))
+
+        # Get the chat logger
+        chat_logger = logging.getLogger('chat')
+
+        # Log the chat input
+        chat_logger.info(f"User query: {query}")
+
         response = query_ollama(prompt)
+
+        # Log the chat output
+        chat_logger.info(f"Ollama response: {response}")
 
         if response.startswith('Error:'):
             return jsonify({'error': response}), 500
@@ -255,6 +284,7 @@ def chat_with_ollama():
             'error': str(e),
             'details': traceback.format_exc()
         }), 500
+
 
 def validate_file(file) -> Optional[str]:
     """Validate uploaded file"""

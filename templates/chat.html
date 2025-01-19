@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 80%;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        .form-container {
+            margin-top: 30px;
+        }
+        label {
+            display: block;
+            margin: 10px 0 5px;
+        }
+        input, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e0f7fa;
+            border: 1px solid #26c6da;
+            border-radius: 5px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+        }
+        .error {
+            background-color: #ffebee;
+            border: 1px solid #ef5350;
+            color: #c62828;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ollama Chatbot Interface</h1>
+        <div class="form-container">
+            <label for="history">Chat History (JSON format):</label>
+            <textarea id="history" rows="5" placeholder='["Previous conversation 1", "Previous conversation 2"]'></textarea>
+
+            <label for="contextText">Context:</label>
+            <textarea id="contextText" rows="5" placeholder="Paste your context here..."></textarea>
+
+            <label for="query">Your Query:</label>
+            <textarea id="query" rows="3" placeholder="Ask your question here..."></textarea>
+
+            <button id="sendQueryBtn">Send Query</button>
+
+            <div class="loading" id="loadingMessage" style="display:none;">Loading...</div>
+            <div class="error" id="errorMessage"></div>
+            <div class="response" id="responseArea" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const handleQuery = async () => {
+            const historyInput = document.getElementById('history').value;
+            const contextInput = document.getElementById('contextText').value.trim();
+            const queryInput = document.getElementById('query').value.trim();
+            const errorDiv = document.getElementById('errorMessage');
+            const loadingDiv = document.getElementById('loadingMessage');
+            const responseDiv = document.getElementById('responseArea');
+
+            // Reset display states
+            errorDiv.style.display = 'none';
+            responseDiv.style.display = 'none';
+            
+            if (!queryInput) {
+                errorDiv.textContent = "Please enter a query.";
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            let historyData = [];
+            if (historyInput.trim()) {
+                try {
+                    historyData = JSON.parse(historyInput);
+                } catch (e) {
+                    console.error('History parse error:', e);
+                    errorDiv.textContent = "Invalid JSON format in history. Using empty history instead.";
+                    errorDiv.style.display = 'block';
+                }
+            }
+
+            const requestData = {
+                query: queryInput,
+                history: historyData,
+                context: contextInput
+            };
+
+            // Show loading indicator
+            loadingDiv.style.display = 'block';
+
+            try {
+                console.log('Sending request:', requestData);
+                const response = await fetch('/ollama/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+                console.log('Received response:', data);
+
+                // Hide loading indicator
+                loadingDiv.style.display = 'none';
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get response');
+                }
+
+                if (data.response) {
+                    responseDiv.textContent = data.response;
+                    responseDiv.style.display = 'block';
+                } else {
+                    throw new Error('No response received');
+                }
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                errorDiv.textContent = 'Error: ' + error.message;
+                errorDiv.style.display = 'block';
+                console.error('Error:', error);
+            }
+        };
+
+        // Add event listener after function definition
+        document.getElementById('sendQueryBtn').addEventListener('click', handleQuery);
+    </script>
+</body>
+</html>

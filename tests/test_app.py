@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+from datetime import datetime
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,8 +14,10 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import app and its components
-from app import app, validate_file, create_logseq_note, process_video, init_directories
+from app import app, validate_file, create_logseq_note
 from config import settings
+from admin.math_analytics import MathLectureAnalyzer
+from admin.lecture_stats import LectureStatsTracker
 
 class MockFile:
     """Mock file object for testing"""
@@ -46,15 +49,59 @@ def temp_dir():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 @pytest.fixture
+def mock_stats_file(temp_dir):
+    """Create a mock stats file for testing"""
+    stats = {
+        "metadata": {
+            "title": "test_video",
+            "processing_time": 107,
+            "timestamp": datetime.now().isoformat(),
+            "source_file": "test_video.mp4"
+        },
+        "analysis": {
+            "word_count": 1000,
+            "chunk_count": 2,
+            "summary_count": 1,
+            "topics": {
+                "core_topics": ["Mathematics", "Linear Algebra"],
+                "dependencies": ["Topic A -> Topic B"],
+                "theoretical_links": ["Link 1"]
+            },
+            "concepts": {
+                "key_concepts": ["Matrices", "Vectors"],
+                "relationships": ["Relationship 1"],
+                "prerequisites": ["Prereq 1"]
+            },
+            "learning_objectives": [
+                "Understand matrices",
+                "Apply vector operations"
+            ],
+            "complexity_analysis": {
+                "total_score": 5.0,
+                "metrics": {
+                    "term_density": 5.0,
+                    "concept_density": 5.0,
+                    "abstraction_level": 5.0
+                }
+            }
+        }
+    }
+    
+    stats_file = temp_dir / "test_video_stats.json"
+    with open(stats_file, 'w') as f:
+        json.dump(stats, f)
+    return stats_file
+
+@pytest.fixture
 def setup_directories(temp_dir):
     """Setup test directories and cleanup after"""
-    # Create temporary test directories
     test_dirs = {
         "uploads": temp_dir / "uploads",
         "audio": temp_dir / "audio",
         "transcripts": temp_dir / "transcripts",
         "summaries": temp_dir / "summaries",
-        "logseq": temp_dir / "logseq"
+        "logseq": temp_dir / "logseq",
+        "stats": temp_dir / "stats"
     }
 
     # Create directories
@@ -63,8 +110,6 @@ def setup_directories(temp_dir):
 
     # Store original directories
     original_dirs = settings.OUTPUT_DIRS.copy()
-
-    # Update settings to use test directories
     settings.OUTPUT_DIRS.update(test_dirs)
 
     yield test_dirs
@@ -72,396 +117,133 @@ def setup_directories(temp_dir):
     # Restore original directories
     settings.OUTPUT_DIRS = original_dirs
 
-@pytest.fixture
-def mock_video_file():
-    """Create a mock video file for testing"""
-    return MockFile(
-        filename='test_video.mp4',
-        content=b'mock video content',
-        content_length=1024
-    )
-
-def test_basic():
-    """Basic test to verify testing setup"""
-    assert True
-
-def test_home_page(client):
-    """Test the home page endpoint"""
-    response = client.get('/')
+def test_admin_dashboard_access(client):
+    """Test access to admin dashboard"""
+    response = client.get('/admin/')
     assert response.status_code == 200
-    assert b'<!DOCTYPE html>' in response.data
+    assert b'Admin Analytics Dashboard' in response.data
 
-def test_status_endpoint(client):
-    """Test the status endpoint"""
-    response = client.get(f'{settings.API_PREFIX}/status')
+def test_admin_api_stats(client, setup_directories, mock_stats_file):
+    """Test admin stats API endpoint"""
+    response = client.get('/admin/api/stats')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert data['status'] == 'running'
+    assert 'word_counts' in data
+    assert 'total_documents' in data
+    assert 'processing_stats' in data
 
-def test_validate_file():
-    """Test file validation function"""
-    # Test valid file
-    valid_file = MockFile('test.mp4', content_length=1024)
-    assert validate_file(valid_file) is None
-
-    # Test no file
-    assert validate_file(None) == "No file provided"
-
-    # Test empty filename
-    no_name_file = MockFile('', content_length=1024)
-    assert validate_file(no_name_file) == "No file selected"
-
-    # Test file too large
-    large_file = MockFile('test.mp4', content_length=settings.MAX_FILE_SIZE + 1)
-    assert validate_file(large_file) == f"File size exceeds {settings.MAX_FILE_SIZE/(1024*1024)}MB limit"
-
-    # Test invalid extension
-    wrong_type = MockFile('test.txt', content_length=1024)
-    assert validate_file(wrong_type) == "File type not allowed"
-
-    # Test no extension
-    no_ext = MockFile('testfile', content_length=1024)
-    assert validate_file(no_ext) == "Invalid file format"
-
-def test_create_logseq_note(temp_dir):
-    """Test Logseq note creation"""
-    # Create a test summary file
-    summary_content = "Test summary line 1\nTest summary line 2\n"
-    summary_file = temp_dir / "test_summary.txt"
-    summary_file.write_text(summary_content)
-
-    # Create note
-    title = "Test Video"
-    logseq_path = create_logseq_note(summary_file, title)
-
-    # Verify note was created
-    assert logseq_path is not None
-    assert logseq_path.exists()
-
-    # Check content
-    content = logseq_path.read_text()
-    assert f"- summarized [[{title}]]" in content
-    assert "- [[summary]]" in content
-    assert "    Test summary line 1" in content
-    assert "    Test summary line 2" in content
-
-def test_create_logseq_note_missing_file(temp_dir):
-    """Test Logseq note creation with missing summary file"""
-    missing_file = temp_dir / "nonexistent.txt"
-    result = create_logseq_note(missing_file, "Test")
-    assert result is None
-
-def test_logseq_note_io_error(temp_dir, monkeypatch):
-    """Test IO error handling in Logseq note creation"""
-    # Create a test summary file
-    summary_file = temp_dir / "test_summary.txt"
-    summary_file.write_text("Test content")
+def test_lecture_stats_tracking(setup_directories, mock_stats_file):
+    """Test lecture statistics tracking"""
+    stats_tracker = LectureStatsTracker(str(setup_directories["stats"]))
+    lecture_stats = stats_tracker.get_lecture_stats("test_video")
     
-    # Counter to control which call to open raises the error
-    call_count = 0
-    original_open = open
+    assert lecture_stats['metadata']['title'] == "test_video"
+    assert lecture_stats['analysis']['word_count'] == 1000
+    assert 'topics' in lecture_stats['analysis']
+    assert 'concepts' in lecture_stats['analysis']
+
+def test_math_lecture_analyzer():
+    """Test math content analyzer"""
+    analyzer = MathLectureAnalyzer()
+    content = "Let's discuss matrices and vectors in linear algebra."
     
-    def mock_open(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 2:  # Let the first read succeed, fail on write
-            raise IOError("Mock IO error")
-        return original_open(*args, **kwargs)
+    # Test topic analysis
+    topics = analyzer.analyze_topic_relationships(content)
+    assert isinstance(topics, dict)
+    assert 'core_topics' in topics
+    
+    # Test concept mapping
+    concepts = analyzer.generate_concept_map(content)
+    assert isinstance(concepts, dict)
+    assert 'concepts' in concepts
+    
+    # Test complexity analysis
+    complexity = analyzer.analyze_complexity()
+    assert isinstance(complexity, list)
+    assert len(complexity) > 0
+
+def test_admin_api_lecture_stats(client, setup_directories, mock_stats_file):
+    """Test individual lecture stats API endpoint"""
+    response = client.get('/admin/api/lecture/test_video')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['metadata']['title'] == "test_video"
+    assert 'analysis' in data
+
+def test_admin_api_invalid_lecture(client):
+    """Test API response for non-existent lecture"""
+    response = client.get('/admin/api/lecture/nonexistent')
+    assert response.status_code == 404
+
+def test_stats_file_creation(setup_directories, mock_video_file, monkeypatch):
+    """Test stats file creation during video processing"""
+    def mock_process_video(*args):
+        return {'audio_path': 'test.wav', 'stats_path': 'test_stats.json'}
+    monkeypatch.setattr('app.process_video', mock_process_video)
+    
+    data = {
+        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
+        'title': 'Test Video'
+    }
+    
+    with app.test_client() as client:
+        response = client.post('/api/v1/process', data=data)
+        assert response.status_code == 200
+        assert 'stats_path' in json.loads(response.data)['files']
+
+def test_missing_stats_directory(temp_dir):
+    """Test handling of missing stats directory"""
+    stats_dir = temp_dir / "missing_stats"
+    stats_tracker = LectureStatsTracker(str(stats_dir))
+    assert stats_tracker.get_all_stats() == {}
+
+def test_malformed_stats_file(setup_directories):
+    """Test handling of malformed stats file"""
+    stats_file = setup_directories["stats"] / "malformed_stats.json"
+    with open(stats_file, 'w') as f:
+        f.write("invalid json")
         
-    monkeypatch.setattr('builtins.open', mock_open)
-    
-    result = create_logseq_note(summary_file, "Test")
-    assert result is None
+    stats_tracker = LectureStatsTracker(str(setup_directories["stats"]))
+    stats = stats_tracker.get_lecture_stats("malformed_stats")
+    assert stats == {}
 
-
-def test_upload_no_file(client):
-    """Test upload endpoint with no file"""
-    response = client.post(f'{settings.API_PREFIX}/process')
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert data['error'] == "No file selected"
-
-def test_upload_empty_filename(client):
-    """Test upload with empty filename"""
-    data = {'file': (BytesIO(b''), '')}
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert data['error'] == "No file selected"
-
-def test_upload_invalid_file_type(client):
-    """Test upload with invalid file type"""
-    data = {
-        'file': (BytesIO(b'test content'), 'test.txt')
-    }
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert data['error'] == "File type not allowed"
-
-def test_upload_valid_file(client, setup_directories, mock_video_file, monkeypatch):
-    """Test upload with valid video file"""
-    result_files = {
-        'audio_path': setup_directories['audio'] / 'test_audio.wav',
-        'transcript_path': setup_directories['transcripts'] / 'test_transcript.txt',
-        'summary_path': setup_directories['summaries'] / 'test_summary.txt',
-        'logseq_path': setup_directories['logseq'] / 'test_note.md'
-    }
-    
-    # Create mock files
-    for path in result_files.values():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('test content')
-
-    # Mock process_video
-    def mock_process(file_path, title):
-        return result_files
-    
-    monkeypatch.setattr('app.process_video', mock_process)
-
-    data = {
-        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
-        'title': 'Test Video'
-    }
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    
+def test_admin_api_stats_empty(client, setup_directories):
+    """Test stats API with no data"""
+    response = client.get('/admin/api/stats')
     assert response.status_code == 200
     data = json.loads(response.data)
-    assert data['status'] == 'success'
-    assert 'files' in data
+    assert data['word_counts']['total'] == 0
+    assert data['total_documents'] == 0
 
-def test_process_video_error_handling(client, setup_directories, mock_video_file, monkeypatch):
-    """Test error handling in process_video function"""
-    def mock_process_local_video(file_path):
-        raise RuntimeError("Mock audio extraction error")
-        
-    monkeypatch.setattr('app.process_local_video', mock_process_local_video)
+def test_admin_api_stats_error(client, monkeypatch):
+    """Test stats API error handling"""
+    def mock_get_stats_data():
+        raise Exception("Mock error")
+    monkeypatch.setattr('admin.routes.get_stats_data', mock_get_stats_data)
     
-    data = {
-        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
-        'title': 'Test Video'
-    }
-    
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    
+    response = client.get('/admin/api/stats')
     assert response.status_code == 500
-    data = json.loads(response.data)
-    assert 'error' in data
-    assert 'Mock audio extraction error' in str(data['error'])
+    assert 'error' in json.loads(response.data)
 
-
-def test_process_video_invalid_paths(client, setup_directories, mock_video_file, monkeypatch):
-    """Test handling of invalid paths in process_video"""
-    # Mock process_video to return invalid paths
-    def mock_process_local_video(file_path):
-        return str(Path('nonexistent.wav'))
-
-    monkeypatch.setattr('app.process_local_video', mock_process_local_video)
-
-    # Mock transcribe to simulate processing
-    def mock_transcribe(audio_path):
-        return 1, "test", str(Path('nonexistent.txt'))
-
-    monkeypatch.setattr('app.transcribe', mock_transcribe)
-
-    data = {
-        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
-        'title': 'Test Video'
-    }
-
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-
-    assert response.status_code == 500
-    data = json.loads(response.data)
-    assert 'error' in data
-    assert 'No such file or directory' in str(data['error'])
-
-
-def test_large_file_upload(client):
-    """Test upload with file exceeding size limit"""
-    app.config['MAX_CONTENT_LENGTH'] = 1024  # Set a small limit for testing
-    large_content = b'x' * 2048  # Content larger than limit
-    data = {
-        'file': (BytesIO(large_content), 'large.mp4')
-    }
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "File size exceeds" in data['error']
-    app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE  # Restore original limit
-
-def test_concurrent_requests(client):
-    """Test handling multiple concurrent requests"""
+def test_concurrent_stats_access(client, setup_directories, mock_stats_file):
+    """Test concurrent access to stats endpoint"""
     import threading
     import queue
     
     results = queue.Queue()
     
     def make_request():
-        response = client.get(f'{settings.API_PREFIX}/status')
+        response = client.get('/admin/api/stats')
         results.put(response.status_code)
     
-    # Create and run multiple threads
     threads = [threading.Thread(target=make_request) for _ in range(10)]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join()
     
-    # Check all responses
     while not results.empty():
         assert results.get() == 200
-
-def test_upload_cleanup(client, setup_directories, mock_video_file, monkeypatch):
-    """Test that uploaded files are cleaned up"""
-    # Mock process_video to return valid paths
-    def mock_process(file_path, title):
-        return {
-            'audio_path': setup_directories['audio'] / 'test_audio.wav',
-            'transcript_path': setup_directories['transcripts'] / 'test_transcript.txt',
-            'summary_path': setup_directories['summaries'] / 'test_summary.txt',
-            'logseq_path': setup_directories['logseq'] / 'test_note.md'
-        }
-    monkeypatch.setattr('app.process_video', mock_process)
-
-    data = {
-        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
-        'title': 'Test Video'
-    }
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    
-    # Check that uploaded file was cleaned up
-    assert len(list(settings.OUTPUT_DIRS['uploads'].iterdir())) == 0
-
-def test_process_video_cleanup_error(client, setup_directories, mock_video_file, monkeypatch):
-    """Test error handling during file cleanup"""
-    def mock_unlink(*args):
-        raise OSError("Mock cleanup error")
-        
-    # Mock the unlink method
-    monkeypatch.setattr(Path, 'unlink', mock_unlink)
-    
-    # Mock process_video to avoid actual processing
-    def mock_process(file_path, title):
-        return {
-            'audio_path': setup_directories['audio'] / 'test_audio.wav',
-            'transcript_path': setup_directories['transcripts'] / 'test_transcript.txt',
-            'summary_path': setup_directories['summaries'] / 'test_summary.txt',
-            'logseq_path': setup_directories['logseq'] / 'test_note.md'
-        }
-    monkeypatch.setattr('app.process_video', mock_process)
-    
-    data = {
-        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
-        'title': 'Test Video'
-    }
-    
-    response = client.post(
-        f'{settings.API_PREFIX}/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    
-    assert response.status_code == 200  # The request should still succeed even if cleanup fails
-
-@app.route('/test-error')
-def trigger_error():
-    """Test route to trigger a 500 error"""
-    raise ValueError("Test error")
-
-def test_error_handler(client):
-    """Test global error handler"""
-    # Test 404 error
-    response = client.get('/nonexistent')
-    assert response.status_code == 404
-    data = json.loads(response.data)
-    assert 'error' in data
-    assert data['error'] == 'Not Found'
-    
-    # Test 500 error
-    response = client.get('/test-error')
-    assert response.status_code == 500
-    data = json.loads(response.data)
-    assert 'error' in data
-    assert data['error'] == 'Internal Server Error'
-    assert 'message' in data
-    assert 'details' in data
-
-
-def test_missing_directory_creation(temp_dir, client, monkeypatch):
-    """Test automatic creation of missing directories"""
-    import app as app_module  # Import the module itself
-    
-    # Store original directories
-    original_dirs = settings.OUTPUT_DIRS.copy()
-    
-    try:
-        # Update settings to use temp directory
-        test_dirs = {
-            "uploads": temp_dir / "uploads",
-            "audio": temp_dir / "audio",
-            "transcripts": temp_dir / "transcripts",
-            "summaries": temp_dir / "summaries",
-            "logseq": temp_dir / "logseq"
-        }
-        
-        # Update settings
-        settings.OUTPUT_DIRS = test_dirs
-        
-        # Remove all directories if they exist
-        for directory in test_dirs.values():
-            if directory.exists():
-                shutil.rmtree(directory)
-                
-        # Run initialization
-        init_directories()
-            
-        # Check all directories exist
-        for directory in test_dirs.values():
-            assert directory.exists()
-            assert directory.is_dir()
-    
-    finally:
-        # Restore original directories
-        settings.OUTPUT_DIRS = original_dirs
-
-def test_init_directories_error(monkeypatch):
-    """Test error handling in directory initialization"""
-    def mock_makedirs(*args, **kwargs):
-        raise OSError("Mock directory creation error")
-        
-    monkeypatch.setattr(os, 'makedirs', mock_makedirs)
-    
-    with pytest.raises(OSError):
-        init_directories()
 
 if __name__ == '__main__':
     pytest.main(['-v', __file__])

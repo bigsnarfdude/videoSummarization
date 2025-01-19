@@ -28,6 +28,7 @@ A Flask-based web application that transforms video content into transcripts, su
 - FFmpeg
 - Whisper.cpp
 - MLX
+- Ollama
 
 ## Installation
 
@@ -96,19 +97,26 @@ mkdir -p files/{uploads,audio,transcripts,summaries,logseq,stats} logs
 ```
 videoSummarization/
 ├── admin/                 # Admin dashboard
-│   ├── api_routes.py     # API endpoints
-│   ├── lecture_stats.py  # Statistics tracking
-│   └── math_analytics.py # Content analysis
-├── transcribe/           # Core processing
-│   ├── get_video.py     # Video handling
-│   ├── processor.py     # Main processing
+│   ├── api_routes.py      # API endpoints
+│   ├── lecture_stats.py   # Statistics tracking
+│   └── math_analytics.py  # Content analysis
+│   └── routes.py          # Routes
+├── transcribe/            # Core processing
+│   ├── get_video.py       # Video handling
+│   ├── processor.py       # Main processing
 │   ├── summarize_model.py # MLX integration
-│   ├── transcribe.py    # Whisper integration
-│   └── utils.py         # Utilities
-├── templates/           # Frontend templates
-├── static/             # Static assets
-├── app.py             # Flask application
-├── config.py          # Configuration
+│   ├── transcribe.py      # Whisper integration
+│   └── utils.py           # Utilities
+├── templates/             # Frontend templates
+│   └── admin
+│       └── dashboard.html # Analytics template
+│   ├── base.html          # Base template
+│   ├── chat.html          # LLM Chat template
+│   └── index.html         # Upload template
+├── static/                # Static assets
+├── app.py                 # Flask application
+├── config.py              # Configuration
+└── main.py                # CLI Video Processing
 └── requirements.txt   # Dependencies
 ```
 
@@ -214,6 +222,11 @@ black .
    - Check internet connection
    - Monitor system resources
 
+5. **Ollama Model Issues**
+   - Verify model availability
+   - Check internet connection
+   - Monitor system resources
+
 ## Contributing
 
 1. Fork the repository
@@ -232,3 +245,6 @@ MIT
 - [MLX](https://github.com/ml-explore/mlx) for analysis
 - [Flask](https://flask.palletsprojects.com/) framework
 - [Tailwind CSS](https://tailwindcss.com/) for styling
+- [Ollama](https://ollama.com/download) for chat
+- [FFMpeg](https://www.ffmpeg.org/) for video -> audio processing
+

@@ -1,4 +1,4 @@
-# VideoLLM: An AI-powered app built around your video lectures, designed to help you extract insights quickly and efficiently.
+# VideoLLM: An AI-powered app built around your video lectures, designed to help you extract insights.
 
 VideoLLM is an AI-driven tool that helps users analyze video lectures by creating new documents, taking notes, and generating content. It’s designed to assist learners in synthesizing information from various sources and making faster, more meaningful connections.
 

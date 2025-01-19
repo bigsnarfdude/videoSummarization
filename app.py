@@ -121,6 +121,7 @@ def prepare_context(history: List[str], context: str, query: str) -> str:
     result += f"\nCurrent query: {query}"
     return result
 
+
 def query_ollama(prompt: str, retries: int = OLLAMA_RETRY_ATTEMPTS) -> str:
     """Query the Ollama API with retries and improved error handling"""
     if not check_ollama_status():
@@ -147,17 +148,17 @@ def query_ollama(prompt: str, retries: int = OLLAMA_RETRY_ATTEMPTS) -> str:
             return data.get('response', 'No response received')
         except requests.exceptions.ConnectionError:
             if attempt == retries - 1:
-                return "Error: Cannot connect to Ollama. Please check if the service is running."
-            logger.warning(f"Connection attempt {attempt + 1} failed, retrying...")
+                return "Cannot connect to Ollama. Please check if the service is running."
         except requests.Timeout:
             if attempt == retries - 1:
-                return "Error: Request timed out. The model might be loading or the server is busy."
-            logger.warning(f"Timeout on attempt {attempt + 1}, retrying...")
+                return "Request timed out. The model might be loading or the server is busy."
         except Exception as e:
             logger.error(f"Unexpected error querying Ollama: {str(e)}")
             return f"Error: {str(e)}"
-        
+    
     return "Error: Maximum retry attempts reached"
+
+
 
 @app.route('/ollama/status')
 def ollama_status():
@@ -212,12 +213,18 @@ def chat_page():
     """Render chat interface page"""
     return render_template('chat.html')
 
+
 @app.route('/ollama/chat', methods=['POST'])
 def chat_with_ollama():
     """Handle chat requests with improved error handling"""
-    if not request.is_json:
+    if not request.is_json or not request.get_json(silent=True):
         return jsonify({'error': 'No data provided'}), 400
     
+    data = request.get_json()
+    query = data.get('query')
+    if not query or not str(query).strip():
+        return jsonify({'error': 'Query is required'}), 400
+        
     try:
         data = request.get_json(silent=True)
         if not data:

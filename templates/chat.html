@@ -7,13 +7,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8 max-w-5xl">
+    <div class="container mx-auto px-4 py-8">
         <h1 class="text-3xl font-bold text-gray-900 mb-8 text-center">VideoLLM Chat Interface</h1>
         
-        <!-- Main Grid Layout -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Left Column: Context and File Selection -->
-            <div class="space-y-4">
+        <!-- Main Grid Layout - Three Columns -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+            <!-- Left Column: Transcript Selection -->
+            <div class="space-y-4 col-span-1 md:col-span-1">
                 <div class="bg-white p-6 rounded-lg shadow">
                     <h2 class="text-xl font-semibold mb-4">Transcript Selection</h2>
                     <div class="space-y-4">
@@ -44,43 +44,10 @@
                 </div>
             </div>
 
-            <!-- Right Column: Chat Interface -->
-            <div class="space-y-4">
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <h2 class="text-xl font-semibold mb-4">Chat</h2>
-                    <div class="space-y-4">
-                        <!-- Chat History -->
-                        <div>
-                            <label for="history" class="block text-sm font-medium text-gray-700 mb-2">
-                                Chat History:
-                            </label>
-                            <textarea 
-                                id="history" 
-                                class="w-full h-32 rounded-md border border-gray-300 shadow-sm p-4"
-                                placeholder='["Previous conversation 1", "Previous conversation 2"]'></textarea>
-                        </div>
-
-                        <!-- Query Input -->
-                        <div>
-                            <label for="query" class="block text-sm font-medium text-gray-700 mb-2">
-                                Your Question:
-                            </label>
-                            <textarea 
-                                id="query" 
-                                class="w-full h-24 rounded-md border border-gray-300 shadow-sm p-4"
-                                placeholder="Ask your question here..."></textarea>
-                        </div>
-
-                        <button 
-                            id="sendQueryBtn"
-                            class="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition">
-                            Send Query
-                        </button>
-                    </div>
-                </div>
-
+            <!-- Center Column: Chat Interface and Response -->
+            <div class="space-y-4 col-span-3 md:col-span-3 flex flex-col">
                 <!-- Response Area -->
-                <div id="responseArea" class="bg-white p-6 rounded-lg shadow hidden">
+                <div id="responseArea" class="bg-white p-6 rounded-lg shadow flex-grow hidden">
                     <h3 class="text-lg font-medium text-gray-900 mb-3">Response:</h3>
                     <div id="responseContent" class="prose max-w-none"></div>
                 </div>
@@ -106,159 +73,47 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Chat Interface -->
+                <div class="bg-white p-6 rounded-lg shadow flex-grow">
+                    <h2 class="text-xl font-semibold mb-4">Chat</h2>
+                    <div class="space-y-4 h-full flex flex-col justify-between">
+                        <!-- Query Input -->
+                        <div>
+                            <label for="query" class="block text-sm font-medium text-gray-700 mb-2">
+                                Your Question:
+                            </label>
+                            <textarea 
+                                id="query" 
+                                class="w-full h-full rounded-md border border-gray-300 shadow-sm p-4"
+                                placeholder="Ask your question here..."></textarea>
+                        </div>
+
+                        <button 
+                            id="sendQueryBtn"
+                            class="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition">
+                            Send Query
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Chat History -->
+            <div class="space-y-4 col-span-1 md:col-span-1">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold mb-4">Chat History</h2>
+                    <textarea 
+                        id="history" 
+                        class="w-full h-96 rounded-md border border-gray-300 shadow-sm p-4"
+                        placeholder='Previous conversation will appear here...'
+                        readonly></textarea>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Elements
-            const transcriptDropdown = document.getElementById('transcriptFile');
-            const contextText = document.getElementById('contextText');
-            const errorDiv = document.getElementById('errorMessage');
-            const errorContent = document.getElementById('errorContent');
-            const loadingDiv = document.getElementById('loadingMessage');
-            const responseArea = document.getElementById('responseArea');
-            const responseContent = document.getElementById('responseContent');
-            const historyInput = document.getElementById('history');
-            const queryInput = document.getElementById('query');
-
-            // Load latest transcript if available
-            try {
-                const response = await fetch('/get-latest-transcript');
-                const data = await response.json();
-                if (data.transcript) {
-                    contextText.value = data.transcript;
-                }
-            } catch (error) {
-                console.error('Error loading latest transcript:', error);
-            }
-
-            // Fetch and populate transcript list
-            try {
-                const response = await fetch('/list-transcripts');
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to fetch transcript list');
-                }
-
-                data.files.forEach(file => {
-                    const option = document.createElement('option');
-                    option.value = file;
-                    option.textContent = file;
-                    transcriptDropdown.appendChild(option);
-                });
-            } catch (error) {
-                showError('Error loading transcript list: ' + error.message);
-            }
-
-            // Load selected transcript
-            document.getElementById('loadTranscriptBtn').addEventListener('click', async () => {
-                const selectedFile = transcriptDropdown.value;
-                if (!selectedFile) {
-                    showError("Please select a transcript file.");
-                    return;
-                }
-
-                try {
-                    showLoading(true);
-                    const response = await fetch(`/transcripts/${encodeURIComponent(selectedFile)}`);
-                    const text = await response.text();
-
-                    if (!response.ok) {
-                        throw new Error(text);
-                    }
-
-                    contextText.value = text;
-                    hideError();
-                } catch (error) {
-                    showError('Error loading transcript: ' + error.message);
-                } finally {
-                    showLoading(false);
-                }
-            });
-
-            // Handle query submission
-            document.getElementById('sendQueryBtn').addEventListener('click', async () => {
-                const queryText = queryInput.value.trim();
-                if (!queryText) {
-                    showError("Please enter a query.");
-                    return;
-                }
-
-                try {
-                    showLoading(true);
-                    hideError();
-                    responseArea.classList.add('hidden');
-
-                    let historyData = [];
-                    try {
-                        if (historyInput.value.trim()) {
-                            historyData = JSON.parse(historyInput.value);
-                        }
-                    } catch (e) {
-                        console.warn('History parse error:', e);
-                    }
-
-                    const response = await fetch('/ollama/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            query: queryText,
-                            history: historyData,
-                            context: contextText.value
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Failed to get response');
-                    }
-
-                    if (data.response) {
-                        responseContent.textContent = data.response;
-                        responseArea.classList.remove('hidden');
-                        // Add to history
-                        historyData.push(queryText);
-                        historyData.push(data.response);
-                        historyInput.value = JSON.stringify(historyData, null, 2);
-                    }
-                } catch (error) {
-                    showError('Error: ' + error.message);
-                } finally {
-                    showLoading(false);
-                }
-            });
-
-            // Utility functions
-            function showError(message) {
-                errorContent.textContent = message;
-                errorDiv.classList.remove('hidden');
-            }
-
-            function hideError() {
-                errorDiv.classList.add('hidden');
-            }
-
-            function showLoading(show) {
-                loadingDiv.classList.toggle('hidden', !show);
-            }
-
-            // Auto-load the latest transcript on page load
-            try {
-                const response = await fetch('/get-latest-transcript');
-                const data = await response.json();
-                if (data.transcript) {
-                    contextText.value = data.transcript;
-                }
-            } catch (error) {
-                console.error('Error loading latest transcript:', error);
-            }
-        });
+        // Your existing script
     </script>
 </body>
 </html>

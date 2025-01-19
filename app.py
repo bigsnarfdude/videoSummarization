@@ -5,9 +5,7 @@ import logging.handlers
 import traceback
 import requests
 from typing import Optional, Tuple, Dict, Any, List
-
-from flask import send_from_directory
-
+from flask import send_from_directory, session
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -22,32 +20,32 @@ from transcribe.summarize_model import split_text, summarize_in_parallel, save_s
 from transcribe.utils import get_filename
 from flask_cors import CORS
 
-# First, ensure required directories exist
+# Constants for Ollama
+OLLAMA_BASE_URL = 'http://localhost:11434'
+OLLAMA_TIMEOUT = 120  # Increased timeout for model operations
+OLLAMA_RETRY_ATTEMPTS = 3
+
 def init_directories():
     """Initialize all required directories including logs"""
     log_dir = Path('logs')
     os.makedirs(log_dir, exist_ok=True)
-    
     try:
         log_dir.chmod(0o755)
     except Exception as e:
         print(f"Warning: Could not set log directory permissions: {e}")
 
-# Initialize directories before importing settings or other modules
+# Initialize directories before importing settings
 init_directories()
 
-# Setup logging
 def setup_logging():
     """Configure application logging with rotation and proper permissions"""
     try:
         log_dir = Path(settings.LOG_FILE).parent
         os.makedirs(log_dir, exist_ok=True)
 
-        # Configure root logger
         root_logger = logging.getLogger()
         root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
 
-        # Create rotating file handler
         file_handler = logging.handlers.RotatingFileHandler(
             settings.LOG_FILE,
             maxBytes=10*1024*1024,
@@ -56,15 +54,12 @@ def setup_logging():
         )
         file_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
 
-        # Create console handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
 
-        # Add handlers to root logger
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
 
-        # Test logging
         logger = logging.getLogger(__name__)
         logger.info("Logging initialized successfully")
 
@@ -79,10 +74,9 @@ def setup_logging():
 
 # Initialize Flask app
 app = Flask(__name__)
-
-# Configure app
 app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE
 app.config['SECRET_KEY'] = settings.SECRET_KEY
+app.config['SESSION_TYPE'] = 'filesystem'
 
 # Register blueprints
 app.register_blueprint(admin_bp)
@@ -95,8 +89,28 @@ logger = logging.getLogger(__name__)
 # Use transcripts directory from settings
 TRANSCRIPTS_DIR = settings.OUTPUT_DIRS["transcripts"]
 
+def check_ollama_status() -> bool:
+    """Check if Ollama service is running and responding"""
+    try:
+        response = requests.get(f'{OLLAMA_BASE_URL}/api/tags', timeout=5)
+        return response.ok
+    except:
+        return False
+
+def check_model_availability(model_name: str) -> bool:
+    """Check if specified model is available in Ollama"""
+    try:
+        response = requests.post(
+            f'{OLLAMA_BASE_URL}/api/show',
+            json={"name": model_name},
+            timeout=5
+        )
+        return response.ok
+    except:
+        return False
+
 def prepare_context(history: List[str], context: str, query: str) -> str:
-    """Prepare context for the model by combining history, context, and query"""
+    """Prepare context for the model"""
     result = ""
     if context:
         result += f"Context:\n{context}\n\n"
@@ -107,33 +121,61 @@ def prepare_context(history: List[str], context: str, query: str) -> str:
     result += f"\nCurrent query: {query}"
     return result
 
-def query_ollama(prompt: str) -> str:
-    """Query the Ollama API"""
-    try:
-        logger.info(f"Sending request to Ollama with prompt: {prompt[:100]}...")
-        response = requests.post(
-            'http://localhost:11434/api/generate',
-            json={
-                "model": "phi4:latest",
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=30  # Add timeout to prevent hanging
-        )
-        response.raise_for_status()  # Raise an error for bad status codes
-        data = response.json()
-        logger.info("Successfully received response from Ollama")
-        return data.get('response', 'No response received')
-    except requests.RequestException as e:
-        logger.error(f"Ollama API error: {str(e)}")
-        return f"Error connecting to Ollama: {str(e)}"
-    except Exception as e:
-        logger.error(f"Unexpected error in query_ollama: {str(e)}")
-        return f"Unexpected error: {str(e)}"
+def query_ollama(prompt: str, retries: int = OLLAMA_RETRY_ATTEMPTS) -> str:
+    """Query the Ollama API with retries and improved error handling"""
+    if not check_ollama_status():
+        return "Error: Ollama service is not running. Please start Ollama using 'ollama serve'"
 
-@app.route('/list-transcripts', methods=['GET'])
+    if not check_model_availability("phi4"):
+        return "Error: phi4 model is not available. Please run 'ollama pull phi4'"
+
+    for attempt in range(retries):
+        try:
+            logger.info(f"Sending request to Ollama (attempt {attempt + 1}/{retries})")
+            response = requests.post(
+                f'{OLLAMA_BASE_URL}/api/generate',
+                json={
+                    "model": "phi4:latest",
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=OLLAMA_TIMEOUT
+            )
+            response.raise_for_status()
+            data = response.json()
+            logger.info("Successfully received response from Ollama")
+            return data.get('response', 'No response received')
+        except requests.exceptions.ConnectionError:
+            if attempt == retries - 1:
+                return "Error: Cannot connect to Ollama. Please check if the service is running."
+            logger.warning(f"Connection attempt {attempt + 1} failed, retrying...")
+        except requests.Timeout:
+            if attempt == retries - 1:
+                return "Error: Request timed out. The model might be loading or the server is busy."
+            logger.warning(f"Timeout on attempt {attempt + 1}, retrying...")
+        except Exception as e:
+            logger.error(f"Unexpected error querying Ollama: {str(e)}")
+            return f"Error: {str(e)}"
+        
+    return "Error: Maximum retry attempts reached"
+
+@app.route('/ollama/status')
+def ollama_status():
+    """Endpoint to check Ollama service status"""
+    service_status = check_ollama_status()
+    model_status = check_model_availability("phi4") if service_status else False
+    
+    return jsonify({
+        'status': 'ok' if service_status and model_status else 'error',
+        'details': {
+            'service': service_status,
+            'model': model_status
+        }
+    })
+
+@app.route('/list-transcripts')
 def list_transcripts():
-    """List all available transcript files."""
+    """List all available transcript files"""
     try:
         files = list(TRANSCRIPTS_DIR.glob('*.txt'))
         txt_files = [f.name for f in files]
@@ -142,9 +184,24 @@ def list_transcripts():
         logger.error(f"Error listing transcripts: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/transcripts/<filename>', methods=['GET'])
+@app.route('/get-latest-transcript')
+def get_latest_transcript():
+    """Get the most recently processed transcript"""
+    try:
+        if 'latest_transcript' in session:
+            transcript_path = Path(session['latest_transcript'])
+            if transcript_path.exists():
+                with open(transcript_path, 'r') as f:
+                    transcript_text = f.read()
+                return jsonify({'transcript': transcript_text})
+        return jsonify({'transcript': None})
+    except Exception as e:
+        logger.error(f"Error reading transcript: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/transcripts/<filename>')
 def serve_transcript(filename):
-    """Serve a transcript file by name."""
+    """Serve a transcript file by name"""
     try:
         return send_from_directory(str(TRANSCRIPTS_DIR), filename, as_attachment=False)
     except FileNotFoundError:
@@ -157,34 +214,31 @@ def chat_page():
 
 @app.route('/ollama/chat', methods=['POST'])
 def chat_with_ollama():
-    """Handle chat requests"""
-    # First, check the raw request data
-    if request.data == b'' or request.data is None:
+    """Handle chat requests with improved error handling"""
+    if not request.is_json:
         return jsonify({'error': 'No data provided'}), 400
     
     try:
-        # Check if we received any JSON data
-        if not request.is_json:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        # Explicitly handle None data
         data = request.get_json(silent=True)
-        if data is None:
+        if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
-        # Convert query to string and strip, with None check
+
         query = data.get('query')
-        if query is None or not str(query).strip():
+        if not query or not str(query).strip():
             return jsonify({'error': 'Query is required'}), 400
+
+        # Check Ollama status before proceeding
+        if not check_ollama_status():
+            return jsonify({'error': 'Ollama service is not available'}), 503
 
         history = data.get('history', [])
         context = data.get('context', '')
 
-        # Prepare context for the model
         prompt = prepare_context(history, context, str(query))
-
-        # Get response from Ollama
         response = query_ollama(prompt)
+
+        if response.startswith('Error:'):
+            return jsonify({'error': response}), 500
 
         return jsonify({'response': response}), 200
 
@@ -204,7 +258,6 @@ def validate_file(file) -> Optional[str]:
     if len(file.filename) > settings.MAX_FILENAME_LENGTH:
         return f"Filename too long (max {settings.MAX_FILENAME_LENGTH} characters)"
     
-    # Safely handle content_length with a default of 0
     content_length = getattr(file, 'content_length', 0) or 0
     if content_length > settings.MAX_FILE_SIZE:
         return f"File size exceeds {settings.MAX_FILE_SIZE/(1024*1024)}MB limit"
@@ -216,7 +269,6 @@ def validate_file(file) -> Optional[str]:
         return "File type not allowed"
     return None
 
-# Routes
 @app.route('/')
 def home():
     """Render video upload page"""
@@ -241,10 +293,8 @@ def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
             logger.error(f"File validation error: {error}")
             return jsonify({'error': error}), 400
 
-        # Get title from form data or use filename
         title = request.form.get('title', Path(file.filename).stem)
         
-        # Save and process file
         try:
             filename = secure_filename(file.filename)
             file_path = settings.OUTPUT_DIRS["uploads"] / filename
@@ -252,9 +302,11 @@ def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
             file.save(file_path)
             logger.info(f"File saved successfully: {file_path}")
             
-            # Process the video
             logger.info(f"Starting video processing for: {filename}")
             result = process_video(file_path, title)
+            
+            if result['transcript_path']:
+                session['latest_transcript'] = str(result['transcript_path'])
             
             response = {
                 'status': 'success',
@@ -303,7 +355,6 @@ def status() -> Tuple[Dict[str, str], int]:
     """Health check endpoint"""
     return jsonify({'status': 'running'}), 200
 
-# Error handlers
 @app.errorhandler(404)
 def not_found_error(error):
     """Handle 404 errors"""
@@ -328,15 +379,13 @@ def handle_exception(e):
     """Handle any uncaught exception"""
     logger.error(f"Unhandled exception: {str(e)}")
     logger.error(traceback.format_exc())
-    
     return jsonify({
-        'error': 'Internal Server Error',
-        'message': str(e),
-        'details': traceback.format_exc()
+        'error': str(e),
+        'details': traceback.format_exc(),
+        'type': type(e).__name__
     }), 500
 
 if __name__ == '__main__':
-    # Initialize all directories
     for directory in settings.OUTPUT_DIRS.values():
         os.makedirs(directory, exist_ok=True)
     

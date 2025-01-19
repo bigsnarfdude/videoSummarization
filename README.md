@@ -2,6 +2,8 @@
 
 VideoLLM is an AI-driven tool that helps users analyze video lectures by creating new documents, taking notes, and generating content. It’s designed to assist learners in synthesizing information from various sources and making faster, more meaningful connections.
 
+![Chat interface image](images/chat.png)
+
 ## Key Features
 
 - 🎥 Video Processing

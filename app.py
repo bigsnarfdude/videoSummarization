@@ -6,6 +6,8 @@ import traceback
 import requests
 from typing import Optional, Tuple, Dict, Any, List
 
+from flask import send_from_directory
+
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -18,7 +20,7 @@ from transcribe.get_video import process_local_video
 from transcribe.transcribe import transcribe
 from transcribe.summarize_model import split_text, summarize_in_parallel, save_summaries
 from transcribe.utils import get_filename
-
+from flask_cors import CORS
 # First, ensure required directories exist
 def init_directories():
     """Initialize all required directories including logs"""
@@ -32,6 +34,7 @@ def init_directories():
 
 # Initialize directories before importing settings or other modules
 init_directories()
+
 
 # Setup logging
 def setup_logging():
@@ -126,6 +129,29 @@ def query_ollama(prompt: str) -> str:
         logger.error(f"Unexpected error in query_ollama: {str(e)}")
         return f"Unexpected error: {str(e)}"
 
+
+
+TRANSCRIPTS_DIR = "/Users/vincent/Downloads/videoSummarization/files/transcripts"
+
+@app.route('/list-transcripts', methods=['GET'])
+def list_transcripts():
+    """List all available transcript files."""
+    try:
+        files = os.listdir(TRANSCRIPTS_DIR)
+        txt_files = [f for f in files if f.endswith('.txt')]
+        return jsonify({'files': txt_files}), 200
+    except Exception as e:
+        logger.error(f"Error listing transcripts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/transcripts/<filename>', methods=['GET'])
+def serve_transcript(filename):
+    """Serve a transcript file by name."""
+    try:
+        return send_from_directory(TRANSCRIPTS_DIR, filename, as_attachment=False)
+    except FileNotFoundError:
+        return jsonify({'error': f"File '{filename}' not found"}), 404
 
 
 @app.route('/chat')
@@ -322,7 +348,7 @@ if __name__ == '__main__':
     
     logger.info(f"Starting server on {settings.HOST}:{settings.PORT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
-    
+    CORS(app)
     app.run(
         debug=settings.DEBUG,
         host=settings.HOST,

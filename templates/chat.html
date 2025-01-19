@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ollama Chatbot</title>
+    <title>VideoLLM Chatbot</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -68,7 +68,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Ollama Chatbot Interface</h1>
+        <h1>VideoLLM Chatbot Interface</h1>
         <div class="form-container">
             <label for="history">Chat History (JSON format):</label>
             <textarea id="history" rows="5" placeholder='["Previous conversation 1", "Previous conversation 2"]'></textarea>
@@ -85,6 +85,13 @@
             <div class="error" id="errorMessage"></div>
             <div class="response" id="responseArea" style="display:none;"></div>
         </div>
+        <label for="transcriptFile">Select a Transcript:</label>
+        <select id="transcriptFile">
+            <option value="" disabled selected>Select a file...</option>
+        </select>
+        <button id="loadTranscriptBtn">Load Transcript</button>
+        <textarea id="contextText" rows="5" placeholder="Context will appear here..."></textarea>
+
     </div>
 
     <script>
@@ -162,6 +169,59 @@
 
         // Add event listener after function definition
         document.getElementById('sendQueryBtn').addEventListener('click', handleQuery);
+
+        document.addEventListener('DOMContentLoaded', async () => {
+    const transcriptDropdown = document.getElementById('transcriptFile');
+    const contextText = document.getElementById('contextText');
+    const errorDiv = document.getElementById('errorMessage');
+
+    // Fetch and populate transcript list
+    try {
+        const response = await fetch('/list-transcripts');
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to fetch transcript list.');
+        }
+
+        data.files.forEach(file => {
+            const option = document.createElement('option');
+            option.value = file;
+            option.textContent = file;
+            transcriptDropdown.appendChild(option);
+        });
+    } catch (error) {
+        errorDiv.textContent = 'Error loading transcript list: ' + error.message;
+        errorDiv.style.display = 'block';
+    }
+
+    // Load selected transcript
+    document.getElementById('loadTranscriptBtn').addEventListener('click', async () => {
+        const selectedFile = transcriptDropdown.value;
+
+        if (!selectedFile) {
+            errorDiv.textContent = "Please select a transcript file.";
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/transcripts/${encodeURIComponent(selectedFile)}`);
+            const text = await response.text();
+
+            if (!response.ok) {
+                throw new Error(text);
+            }
+
+            contextText.value = text;
+            errorDiv.style.display = 'none';
+        } catch (error) {
+            errorDiv.textContent = 'Error loading transcript: ' + error.message;
+            errorDiv.style.display = 'block';
+        }
+    });
+});
+
     </script>
 </body>
 </html>

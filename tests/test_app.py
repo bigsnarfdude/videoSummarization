@@ -522,3 +522,118 @@ def test_large_request_handling(client):
     assert response.status_code == 400
     data = json.loads(response.data)
     assert 'File size exceeds' in data['error']
+def test_prepare_context(client):
+    """Test chat context preparation"""
+    with patch('app.prepare_context') as mock_prepare:
+        mock_prepare.return_value = "Prepared context"
+        
+        test_data = {
+            'query': 'test question',
+            'history': ['previous message'],
+            'document': 'test document'  # Document will be ignored by the endpoint
+        }
+        
+        response = client.post('/ollama/chat', json=test_data)
+        assert response.status_code == 200
+        mock_prepare.assert_called_once_with(
+            ['previous message'], 
+            '',  # The endpoint always passes empty string
+            'test question'
+        )
+
+def test_chat_system_error_handling(client):
+    """Test chat system error scenarios"""
+    test_data = {
+        'query': 'test question',
+        'history': ['previous message'],
+        'document': 'test document'
+    }
+    
+    # Test context preparation error
+    with patch('app.prepare_context') as mock_prepare:
+        mock_prepare.side_effect = Exception("Context preparation failed")
+        response = client.post('/ollama/chat', json=test_data)
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
+    
+    # Test query execution error
+    with patch('app.prepare_context') as mock_prepare, \
+         patch('app.query_ollama') as mock_query:
+        mock_prepare.return_value = "Prepared context"
+        mock_query.side_effect = Exception("Query execution failed")
+        response = client.post('/ollama/chat', json=test_data)
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
+
+def test_directory_permission_error():
+    """Test directory initialization with permission errors"""
+    with patch('os.makedirs') as mock_makedirs, \
+         patch('pathlib.Path.chmod') as mock_chmod:
+        # Test permission error during directory creation
+        mock_makedirs.side_effect = PermissionError("Permission denied")
+        
+        with pytest.raises(Exception) as exc_info:
+            init_directories()
+        assert "Permission denied" in str(exc_info.value)
+        
+        # Reset mock and test permission error during chmod
+        mock_makedirs.side_effect = None
+        mock_chmod.side_effect = PermissionError("Permission denied")
+        init_directories()  # Should not raise exception for chmod failure
+
+def test_file_size_validation_edge_cases(client):
+    """Test file size validation edge cases"""
+    # Test exactly at size limit
+    content = b'x' * settings.MAX_FILE_SIZE
+    response = client.post('/api/v1/process', 
+                          data={'file': (BytesIO(content), 'test.mp4')},
+                          content_type='multipart/form-data')
+    assert response.status_code == 400  # Should still fail due to overhead
+    
+    # Test slightly under size limit
+    content = b'x' * (settings.MAX_FILE_SIZE - 1024)  # 1KB under limit
+    response = client.post('/api/v1/process', 
+                          data={'file': (BytesIO(content), 'test.mp4')},
+                          content_type='multipart/form-data')
+    assert response.status_code != 400  # Should not fail due to size
+
+def test_file_cleanup_after_validation_error(client, setup_directories):
+    """Test file cleanup after validation errors"""
+    with patch('app.validate_file') as mock_validate:
+        mock_validate.return_value = "Validation error"
+        
+        data = {
+            'file': (BytesIO(b'test content'), 'test.mp4'),
+            'title': 'Test'
+        }
+        
+        response = client.post('/api/v1/process', 
+                             data=data,
+                             content_type='multipart/form-data')
+        
+        # Check that no files remain in upload directory
+        upload_dir = setup_directories['uploads']
+        assert len(list(upload_dir.glob('*'))) == 0
+
+def test_error_handler_with_traceback(client):
+    """Test error handler with traceback information"""
+    with patch('app.process_video') as mock_process:
+        def raise_with_traceback():
+            try:
+                raise ValueError("Test error")
+            except ValueError as e:
+                raise RuntimeError("Wrapped error") from e
+        
+        mock_process.side_effect = raise_with_traceback
+        
+        response = client.post('/api/v1/process', 
+                             data={'file': (BytesIO(b'test'), 'test.mp4')},
+                             content_type='multipart/form-data')
+        
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
+        assert 'details' in data
+        assert 'Traceback' in data['details']

@@ -1,6 +1,6 @@
-# Video Transcription and Analysis Platform
+# VideoLLLM -  An AI-first app, grounded in your own video lecture, designed to help you gain insights faster.
 
-A Flask-based web application that transforms video content into transcripts, summaries, and structured knowledge. The platform uses MLX for analysis, Whisper.cpp for transcription, and provides a comprehensive admin dashboard for content insights.
+VideoLLM is an AI-powered tool that helps users analyze video lectures (make new documents, take notes, and generate content). It's designed to help learners synthesize information from multiple sources and make connections faster.
 
 ## Key Features
 
@@ -21,6 +21,12 @@ A Flask-based web application that transforms video content into transcripts, su
   - Word count analytics
   - Topic and concept visualization
   - Content trend analysis
+
+- 🎥 Chat with VideoLLM
+  - Real-time chat with the created documents
+  - Learn more about your document
+  - Use natural language 
+  - Interogate the lecture
 
 ## Prerequisites
 

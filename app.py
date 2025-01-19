@@ -137,11 +137,13 @@ def chat_page():
 def chat_with_ollama():
     """Handle chat requests"""
     try:
-        data = request.json
-        if not data:
+        # First check if we received any JSON data
+        if not request.is_json:
             return jsonify({'error': 'No data provided'}), 400
-
-        query = data.get('query')
+            
+        data = request.get_json()
+        # Empty JSON object is still valid data, just missing required fields
+        query = data.get('query', '').strip()
         if not query:
             return jsonify({'error': 'Query is required'}), 400
 

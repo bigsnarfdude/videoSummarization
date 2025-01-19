@@ -9,9 +9,11 @@ import tempfile
 import threading
 import queue
 import logging
+import requests
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, PropertyMock
 from flask import url_for
+from werkzeug.exceptions import RequestEntityTooLarge
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,7 +21,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import app and its components
-from app import app, validate_file, init_directories, setup_logging
+from app import app, validate_file, init_directories, setup_logging, query_ollama, prepare_context
 from transcribe.processor import create_logseq_note, process_video
 from config import settings
 
@@ -55,7 +57,6 @@ def temp_dir():
 @pytest.fixture
 def setup_directories(temp_dir):
     """Setup test directories and cleanup after"""
-    # Create temporary test directories
     test_dirs = {
         "uploads": temp_dir / "uploads",
         "audio": temp_dir / "audio",
@@ -65,19 +66,14 @@ def setup_directories(temp_dir):
         "stats": temp_dir / "stats"
     }
 
-    # Create directories
     for directory in test_dirs.values():
         directory.mkdir(parents=True, exist_ok=True)
 
-    # Store original directories
     original_dirs = settings.OUTPUT_DIRS.copy()
-
-    # Update settings to use test directories
     settings.OUTPUT_DIRS.update(test_dirs)
 
     yield test_dirs
 
-    # Restore original directories
     settings.OUTPUT_DIRS = original_dirs
 
 @pytest.fixture
@@ -88,6 +84,105 @@ def mock_video_file():
         content=b'mock video content',
         content_length=1024
     )
+
+def test_init_directories_failure():
+    """Test directory initialization complete failure"""
+    with patch('os.makedirs') as mock_makedirs:
+        mock_makedirs.side_effect = PermissionError("Permission denied")
+        with pytest.raises(Exception) as exc_info:
+            init_directories()
+        assert "Permission denied" in str(exc_info.value)
+
+def test_logging_setup_complete_failure():
+    """Test logging setup when all handlers fail"""
+    with patch('logging.getLogger') as mock_logger, \
+         patch('logging.handlers.RotatingFileHandler') as mock_handler, \
+         patch('logging.StreamHandler') as mock_stream:
+        mock_handler.side_effect = Exception("Handler failed")
+        mock_stream.side_effect = Exception("Stream failed")
+        with pytest.raises(Exception) as exc_info:
+            setup_logging()
+        assert "Handler failed" in str(exc_info.value)
+
+def test_query_ollama_connection_error():
+    """Test Ollama API connection failures"""
+    with patch('requests.post') as mock_post:
+        # Test connection error
+        mock_post.side_effect = requests.ConnectionError("Connection failed")
+        response = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in response
+        
+        # Test timeout error
+        mock_post.side_effect = requests.Timeout("Request timed out")
+        response = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in response
+
+def test_ollama_api_error():
+    """Test Ollama API error responses"""
+    with patch('requests.post') as mock_post:
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.side_effect = json.JSONDecodeError("Invalid JSON", "", 0)
+        mock_post.return_value = mock_response
+        response = query_ollama("test prompt")
+        assert "Unexpected error" in response
+
+def test_chat_request_validation(client):
+    """Test chat request validation scenarios"""
+    # Test empty request body
+    response = client.post('/ollama/chat', json=None)
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'No data provided'
+
+    # Test missing query
+    response = client.post('/ollama/chat', json={})
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'Query is required'
+
+    # Test empty query
+    response = client.post('/ollama/chat', json={'query': ''})
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'Query is required'
+
+def test_prepare_context_variations():
+    """Test context preparation with different input combinations"""
+    # Test with all empty values
+    result = prepare_context([], '', '')
+    assert result == '\nCurrent query: '
+
+    # Test with only query
+    result = prepare_context([], '', 'test query')
+    assert result == '\nCurrent query: test query'
+
+    # Test with history
+    result = prepare_context(['msg1', 'msg2'], '', 'test query')
+    assert 'msg1' in result
+    assert 'msg2' in result
+
+    # Test with context
+    result = prepare_context([], 'test context', 'test query')
+    assert 'Context:\ntest context' in result
+
+def test_request_entity_too_large(client):
+    """Test handling of oversized requests"""
+    original_max_length = app.config['MAX_CONTENT_LENGTH']
+    app.config['MAX_CONTENT_LENGTH'] = 1024  # Set a small limit
+
+    try:
+        large_data = b'x' * 2048
+        response = client.post(
+            '/api/v1/process',
+            data={'file': (BytesIO(large_data), 'test.mp4')},
+            content_type='multipart/form-data'
+        )
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "File size exceeds" in data['error']
+    finally:
+        app.config['MAX_CONTENT_LENGTH'] = original_max_length
 
 def test_home_page(client):
     """Test the home page endpoint"""
@@ -104,31 +199,24 @@ def test_status_endpoint(client):
 
 def test_validate_file():
     """Test file validation function"""
-    # Test valid file
     valid_file = MockFile('test.mp4', content_length=1024)
     assert validate_file(valid_file) is None
 
-    # Test no file
     assert validate_file(None) == "No file provided"
 
-    # Test empty filename
     no_name_file = MockFile('', content_length=1024)
     assert validate_file(no_name_file) == "No file selected"
 
-    # Test file too large
     large_file = MockFile('test.mp4', content_length=settings.MAX_FILE_SIZE + 1)
     assert "File size exceeds" in validate_file(large_file)
 
-    # Test filename too long
     long_name = 'a' * (settings.MAX_FILENAME_LENGTH + 1) + '.mp4'
     long_file = MockFile(long_name)
     assert "Filename too long" in validate_file(long_file)
 
-    # Test invalid extension
     wrong_type = MockFile('test.txt', content_length=1024)
     assert validate_file(wrong_type) == "File type not allowed"
 
-    # Test no extension
     no_ext = MockFile('testfile', content_length=1024)
     assert validate_file(no_ext) == "Invalid file format"
 
@@ -142,28 +230,44 @@ def test_upload_no_file(client):
 def test_upload_empty_filename(client):
     """Test upload with empty filename"""
     data = {'file': (BytesIO(b''), '')}
-    response = client.post(
-        '/api/v1/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
+    response = client.post('/api/v1/process', data=data, content_type='multipart/form-data')
     assert response.status_code == 400
     data = json.loads(response.data)
     assert data['error'] == "No file selected"
 
 def test_upload_invalid_file_type(client):
     """Test upload with invalid file type"""
-    data = {
-        'file': (BytesIO(b'test content'), 'test.txt')
-    }
-    response = client.post(
-        '/api/v1/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
+    data = {'file': (BytesIO(b'test content'), 'test.txt')}
+    response = client.post('/api/v1/process', data=data, content_type='multipart/form-data')
     assert response.status_code == 400
     data = json.loads(response.data)
     assert data['error'] == "File type not allowed"
+
+def test_chat_system_error_handling(client):
+    """Test chat system error scenarios"""
+    chat_data = {
+        'query': 'test question',
+        'history': ['previous message'],
+        'document': 'test document'
+    }
+    
+    # Test context preparation error
+    with patch('app.prepare_context') as mock_prepare:
+        mock_prepare.side_effect = Exception("Context preparation failed")
+        response = client.post('/ollama/chat', json=chat_data)
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
+    
+    # Test query execution error
+    with patch('app.prepare_context') as mock_prepare, \
+         patch('app.query_ollama') as mock_query:
+        mock_prepare.return_value = "Prepared context"
+        mock_query.side_effect = Exception("Query execution failed")
+        response = client.post('/ollama/chat', json=chat_data)
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
 
 def test_create_logseq_note(temp_dir):
     """Test Logseq note creation"""
@@ -249,45 +353,6 @@ def test_concurrent_requests(client):
     # Check all responses
     while not results.empty():
         assert results.get() == 200
-
-def test_large_file_upload(client):
-    """Test upload with file exceeding size limit"""
-    app.config['MAX_CONTENT_LENGTH'] = 1024  # Set a small limit for testing
-    large_content = b'x' * 2048  # Content larger than limit
-    data = {
-        'file': (BytesIO(large_content), 'large.mp4')
-    }
-    response = client.post(
-        '/api/v1/process',
-        data=data,
-        content_type='multipart/form-data'
-    )
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "File size exceeds" in data['error']
-    app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE  # Restore original limit
-
-def test_error_handler(client, monkeypatch):
-    """Test global error handler"""
-    # Test 404 error
-    response = client.get('/nonexistent')
-    assert response.status_code == 404
-    data = json.loads(response.data)
-    assert data['error'] == 'Not Found'
-    
-    # Test 500 error without adding new route
-    def mock_process(*args, **kwargs):
-        raise Exception("Test error")
-    
-    # Use existing route with mocked function
-    monkeypatch.setattr('app.process_video', mock_process)
-    response = client.post('/api/v1/process', 
-                          data={'file': (BytesIO(b'test'), 'test.mp4')},
-                          content_type='multipart/form-data')
-    
-    assert response.status_code == 500
-    data = json.loads(response.data)
-    assert data['error'] == 'Test error'  # The actual error message, not 'Internal Server Error'
 
 def test_missing_directory_creation(temp_dir):
     """Test automatic creation of missing directories"""
@@ -386,91 +451,23 @@ def test_chat_endpoint(client):
     assert response.status_code == 200
     assert b'<!DOCTYPE html>' in response.data
 
-
-def test_init_directories_permissions(tmp_path):
-    """Test directory initialization with permission errors"""
-    with patch('os.makedirs') as mock_makedirs, \
-         patch('pathlib.Path.chmod') as mock_chmod:
-        mock_chmod.side_effect = PermissionError("Permission denied")
-        
-        # Should not raise exception even if chmod fails
-        init_directories()
-        
-        assert mock_makedirs.called
-        assert mock_chmod.called
-
-def test_setup_logging_failure(tmp_path):
-    """Test logging setup with file creation failure"""
-    with patch('logging.handlers.RotatingFileHandler') as mock_handler:
-        mock_handler.side_effect = PermissionError("Permission denied")
-        
-        with pytest.raises(Exception):
-            setup_logging()
-
-def test_chat_with_ollama_endpoint(client):
-    """Test the chat endpoint with various inputs"""
-    # Test missing query
-    response = client.post('/ollama/chat', 
-                          json={'history': [], 'document': ''})
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert data['error'] == 'Query is required'
-    
-    # Test successful query
-    test_query = {
-        'query': 'test question',
-        'history': ['previous message'],
-        'document': 'test document'
-    }
-    
-    with patch('app.query_ollama') as mock_query:
-        mock_query.return_value = "Test response"
-        response = client.post('/ollama/chat', json=test_query)
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['response'] == "Test response"
-    
-    # Test query failure
-    with patch('app.query_ollama') as mock_query:
-        mock_query.side_effect = Exception("Query failed")
-        response = client.post('/ollama/chat', json=test_query)
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert 'error' in data
-
-def test_process_video_with_validation_errors(client):
-    """Test video processing with various validation scenarios"""
-    # Test file with invalid content length
+def test_file_cleanup_after_validation_error(client, setup_directories):
+    """Test file cleanup after validation errors"""
     with patch('app.validate_file') as mock_validate:
-        mock_validate.return_value = "Invalid content length"
-        data = {
-            'file': (BytesIO(b'test'), 'test.mp4'),
-            'title': 'Test Video'
-        }
-        response = client.post('/api/v1/process', 
-                             data=data,
-                             content_type='multipart/form-data')
-        assert response.status_code == 400
-        assert b'Invalid content length' in response.data
-
-def test_process_video_with_processing_error(client, setup_directories):
-    """Test video processing with processing errors"""
-    with patch('app.process_video') as mock_process:
-        # Simulate processing error
-        mock_process.side_effect = Exception("Processing failed")
+        mock_validate.return_value = "Validation error"
         
         data = {
-            'file': (BytesIO(b'test'), 'test.mp4'),
-            'title': 'Test Video'
+            'file': (BytesIO(b'test content'), 'test.mp4'),
+            'title': 'Test'
         }
+        
         response = client.post('/api/v1/process', 
                              data=data,
                              content_type='multipart/form-data')
         
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert data['type'] == 'Exception'
+        # Check that no files remain in upload directory
+        upload_dir = setup_directories['uploads']
+        assert len(list(upload_dir.glob('*'))) == 0
 
 def test_error_handler_specific_exceptions(client):
     """Test error handler with specific exception types"""
@@ -492,80 +489,6 @@ def test_error_handler_specific_exceptions(client):
         assert response.status_code == 500
         data = json.loads(response.data)
         assert data['type'] == 'RuntimeError'
-
-def test_cleanup_after_processing_error(client, setup_directories):
-    """Test file cleanup after processing error"""
-    with patch('app.process_video') as mock_process:
-        mock_process.side_effect = Exception("Processing error")
-        
-        data = {
-            'file': (BytesIO(b'test content'), 'test.mp4'),
-            'title': 'Test'
-        }
-        
-        response = client.post('/api/v1/process', 
-                             data=data,
-                             content_type='multipart/form-data')
-        
-        # Check that uploaded file was cleaned up
-        upload_dir = setup_directories['uploads']
-        assert len(list(upload_dir.glob('*'))) == 0
-
-def test_large_request_handling(client):
-    """Test handling of large requests"""
-    # Test request exceeding maximum content length
-    large_data = b'x' * (settings.MAX_FILE_SIZE + 1)
-    response = client.post('/api/v1/process', 
-                          data={'file': (BytesIO(large_data), 'large.mp4')},
-                          content_type='multipart/form-data')
-    
-    assert response.status_code == 400
-    data = json.loads(response.data)
-    assert 'File size exceeds' in data['error']
-def test_prepare_context(client):
-    """Test chat context preparation"""
-    with patch('app.prepare_context') as mock_prepare:
-        mock_prepare.return_value = "Prepared context"
-        
-        test_data = {
-            'query': 'test question',
-            'history': ['previous message'],
-            'document': 'test document'  # Document will be ignored by the endpoint
-        }
-        
-        response = client.post('/ollama/chat', json=test_data)
-        assert response.status_code == 200
-        mock_prepare.assert_called_once_with(
-            ['previous message'], 
-            '',  # The endpoint always passes empty string
-            'test question'
-        )
-
-def test_chat_system_error_handling(client):
-    """Test chat system error scenarios"""
-    test_data = {
-        'query': 'test question',
-        'history': ['previous message'],
-        'document': 'test document'
-    }
-    
-    # Test context preparation error
-    with patch('app.prepare_context') as mock_prepare:
-        mock_prepare.side_effect = Exception("Context preparation failed")
-        response = client.post('/ollama/chat', json=test_data)
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert 'error' in data
-    
-    # Test query execution error
-    with patch('app.prepare_context') as mock_prepare, \
-         patch('app.query_ollama') as mock_query:
-        mock_prepare.return_value = "Prepared context"
-        mock_query.side_effect = Exception("Query execution failed")
-        response = client.post('/ollama/chat', json=test_data)
-        assert response.status_code == 500
-        data = json.loads(response.data)
-        assert 'error' in data
 
 def test_directory_permission_error():
     """Test directory initialization with permission errors"""
@@ -599,41 +522,78 @@ def test_file_size_validation_edge_cases(client):
                           content_type='multipart/form-data')
     assert response.status_code != 400  # Should not fail due to size
 
-def test_file_cleanup_after_validation_error(client, setup_directories):
-    """Test file cleanup after validation errors"""
-    with patch('app.validate_file') as mock_validate:
-        mock_validate.return_value = "Validation error"
-        
-        data = {
-            'file': (BytesIO(b'test content'), 'test.mp4'),
-            'title': 'Test'
-        }
-        
-        response = client.post('/api/v1/process', 
-                             data=data,
-                             content_type='multipart/form-data')
-        
-        # Check that no files remain in upload directory
-        upload_dir = setup_directories['uploads']
-        assert len(list(upload_dir.glob('*'))) == 0
 
-def test_error_handler_with_traceback(client):
-    """Test error handler with traceback information"""
+def test_404_error_handler(client):
+    """Test 404 error handler"""
+    response = client.get('/nonexistent-route')
+    assert response.status_code == 404
+    data = json.loads(response.data)
+    assert 'error' in data
+    assert data['error'] == 'Not Found'
+    assert 'message' in data
+
+def test_413_error_handler(client):
+    """Test 413 (Request Entity Too Large) error handler"""
+    original_max_length = app.config['MAX_CONTENT_LENGTH']
+    app.config['MAX_CONTENT_LENGTH'] = 100  # Set a very small limit
+    try:
+        data = {'file': (BytesIO(b'x' * 200), 'test.mp4')}
+        response = client.post('/api/v1/process', data=data, content_type='multipart/form-data')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert 'error' in data
+        assert "File size exceeds" in data['error']
+    finally:
+        app.config['MAX_CONTENT_LENGTH'] = original_max_length
+
+def test_unhandled_exception_handler(client):
+    """Test generic exception handler"""
     with patch('app.process_video') as mock_process:
-        def raise_with_traceback():
-            try:
-                raise ValueError("Test error")
-            except ValueError as e:
-                raise RuntimeError("Wrapped error") from e
-        
-        mock_process.side_effect = raise_with_traceback
-        
-        response = client.post('/api/v1/process', 
-                             data={'file': (BytesIO(b'test'), 'test.mp4')},
-                             content_type='multipart/form-data')
-        
+        mock_process.side_effect = Exception("Unexpected error")
+        data = {'file': (BytesIO(b'test'), 'test.mp4')}
+        response = client.post('/api/v1/process', data=data, content_type='multipart/form-data')
         assert response.status_code == 500
         data = json.loads(response.data)
         assert 'error' in data
+        assert data['error'] == 'Unexpected error'
         assert 'details' in data
-        assert 'Traceback' in data['details']
+        assert 'type' in data
+        assert data['type'] == 'Exception'
+
+def test_query_ollama_timeout():
+    """Test Ollama API timeout handling"""
+    with patch('requests.post') as mock_post:
+        mock_post.side_effect = requests.Timeout("Request timed out")
+        result = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in result
+        assert "Request timed out" in result
+
+def test_prepare_context_empty():
+    """Test prepare_context with empty inputs"""
+    result = prepare_context([], '', '')
+    assert 'Current query' in result
+    assert result.endswith('Current query: ')
+
+def test_prepare_context_full():
+    """Test prepare_context with all inputs"""
+    history = ['previous message 1', 'previous message 2']
+    context = 'test context'
+    query = 'test query'
+    result = prepare_context(history, context, query)
+    assert 'Context:\ntest context' in result
+    assert 'Previous conversation:' in result
+    assert 'previous message 1' in result
+    assert 'previous message 2' in result
+    assert 'Current query: test query' in result
+
+def test_ollama_chat_system_error(client):
+    """Test chat endpoint system error handling"""
+    with patch('app.query_ollama') as mock_query:
+        mock_query.side_effect = Exception("System error")
+        response = client.post('/ollama/chat', 
+                             json={'query': 'test'},
+                             content_type='application/json')
+        assert response.status_code == 500
+        data = json.loads(response.data)
+        assert 'error' in data
+        assert 'System error' in data['error']

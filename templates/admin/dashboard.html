@@ -1,359 +1,130 @@
-{% extends "base.html" %}
-
-{% block title %}Admin Dashboard{% endblock %}
-
-{% block content %}
-<div class="p-6 max-w-6xl mx-auto">
-    <h1 class="text-2xl font-bold mb-6">Admin Analytics Dashboard</h1>
-    
-    <!-- Tabs -->
-    <div class="mb-6">
-        <div class="border-b border-gray-200">
-            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button 
-                    class="tab-button active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
-                    data-tab="word-stats">
-                    Word Statistics
-                </button>
-                <button 
-                    class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
-                    data-tab="category-tags">
-                    Category Tags
-                </button>
-                <button 
-                    class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
-                    data-tab="trends">
-                    Trends
-                </button>
-            </nav>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document Analysis Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div class="p-6 max-w-6xl mx-auto">
+        <h1 class="text-2xl font-bold mb-6">Document Analysis Dashboard</h1>
+        
+        <!-- Tabs -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button 
+                        class="tab-button active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
+                        data-tab="word-stats">
+                        Word Statistics
+                    </button>
+                    <button 
+                        class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                        data-tab="category-tags">
+                        Categories
+                    </button>
+                </nav>
+            </div>
         </div>
-    </div>
 
-    <!-- Word Statistics Tab -->
-    <div id="word-stats" class="tab-content active">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Word Statistics Tab -->
+        <div id="word-stats" class="tab-content active">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Total Word Count</h3>
+                    <div id="totalWordCount" class="text-2xl font-bold">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Processing Time</h3>
+                    <div id="processingTime" class="text-2xl font-bold">-</div>
+                    <p class="text-xs text-gray-500">milliseconds</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Chunks Processed</h3>
+                    <div id="chunkCount" class="text-2xl font-bold">-</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categories Tab -->
+        <div id="category-tags" class="tab-content hidden">
             <div class="bg-white rounded-lg shadow p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-medium">Total Word Count</h3>
-                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
+                <h3 class="text-lg font-semibold mb-4">Key Concepts</h3>
+                <div id="conceptList" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Concepts will be dynamically inserted here -->
                 </div>
-                <div class="text-2xl font-bold" id="totalWordCount">-</div>
-                <p class="text-xs text-gray-500">across all documents</p>
-            </div>
-
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-medium">Average Words per Document</h3>
-                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="20" x2="18" y2="10"></line>
-                        <line x1="12" y1="20" x2="12" y2="4"></line>
-                        <line x1="6" y1="20" x2="6" y2="14"></line>
-                    </svg>
-                </div>
-                <div class="text-2xl font-bold" id="averageWordCount">-</div>
-                <p class="text-xs text-gray-500">words per document</p>
-            </div>
-
-            <div class="bg-white rounded-lg shadow p-4">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-sm font-medium">Document Count</h3>
-                    <svg class="h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 12H4"></path>
-                        <path d="M20 6H4"></path>
-                        <path d="M20 18H4"></path>
-                    </svg>
-                </div>
-                <div class="text-2xl font-bold" id="documentCount">-</div>
-                <p class="text-xs text-gray-500">total documents</p>
-            </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow p-4 mb-6">
-            <h3 class="text-lg font-semibold mb-4">Word Count Distribution</h3>
-            <div class="h-64">
-                <canvas id="wordCountChart"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- Category Tags Tab -->
-    <div id="category-tags" class="tab-content hidden">
-        <div class="bg-white rounded-lg shadow p-4">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">Analysis Categories</h3>
-                <span class="text-sm text-gray-500" id="totalCategories">Loading categories...</span>
-            </div>
-            <div id="categoryContent" class="space-y-8">
-                <!-- Content will be dynamically inserted here -->
-            </div>
-        </div>
-    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tab Switching Logic
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
 
-    <!-- Trends Tab -->
-    <div id="trends" class="tab-content hidden">
-        <div class="bg-white rounded-lg shadow p-4">
-            <h3 class="text-lg font-semibold mb-4">Processing Trends</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <h4 class="text-sm font-medium text-gray-600 mb-2">Total Chunks Processed</h4>
-                    <div class="text-2xl font-bold" id="totalChunks">-</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-4">
-                    <h4 class="text-sm font-medium text-gray-600 mb-2">Total Summaries Generated</h4>
-                    <div class="text-2xl font-bold" id="totalSummaries">-</div>
-                </div>
-            </div>
-            <div class="h-64">
-                <canvas id="trendsChart"></canvas>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
+        function switchTab(tabId) {
+            tabButtons.forEach(button => {
+                if (button.dataset.tab === tabId) {
+                    button.classList.add('border-blue-500', 'text-blue-600');
+                    button.classList.remove('border-transparent', 'text-gray-500');
+                } else {
+                    button.classList.remove('border-blue-500', 'text-blue-600');
+                    button.classList.add('border-transparent', 'text-gray-500');
+                }
+            });
 
-{% block scripts %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Tab Switching Logic
-    const tabButtons = document.querySelectorAll('.tab-button');
-    const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                if (content.id === tabId) {
+                    content.classList.remove('hidden');
+                } else {
+                    content.classList.add('hidden');
+                }
+            });
+        }
 
-    function switchTab(tabId) {
         tabButtons.forEach(button => {
-            if (button.dataset.tab === tabId) {
-                button.classList.add('border-blue-500', 'text-blue-600');
-                button.classList.remove('border-transparent', 'text-gray-500');
-            } else {
-                button.classList.remove('border-blue-500', 'text-blue-600');
-                button.classList.add('border-transparent', 'text-gray-500');
-            }
+            button.addEventListener('click', () => {
+                switchTab(button.dataset.tab);
+            });
         });
 
-        tabContents.forEach(content => {
-            if (content.id === tabId) {
-                content.classList.remove('hidden');
-            } else {
-                content.classList.add('hidden');
-            }
-        });
-    }
+        // Populate dashboard with data
+        const documentData = {
+            "word_count": 5473,
+            "processing_time": 412,
+            "chunk_count": 2,
+            "key_concepts": [
+                "Material Science", 
+                "Mathematization of Sciences", 
+                "Mathematics", 
+                "Knowledge Economy", 
+                "Berkeley-Edinburgh Research Symposium (BERS)",
+                "Democratization of Access to Talent",
+                "Intellectual Access",
+                "Interaction and Collaboration",
+                "Underrepresented Groups in STEM",
+                "Faculty Model"
+            ]
+        };
 
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            switchTab(button.dataset.tab);
+        // Update Word Statistics
+        document.getElementById('totalWordCount').textContent = documentData.word_count.toLocaleString();
+        document.getElementById('processingTime').textContent = documentData.processing_time;
+        document.getElementById('chunkCount').textContent = documentData.chunk_count;
+
+        // Populate Concepts
+        const conceptList = document.getElementById('conceptList');
+        documentData.key_concepts.forEach(concept => {
+            const conceptElement = document.createElement('div');
+            conceptElement.className = 'bg-blue-50 rounded-lg p-3';
+            conceptElement.innerHTML = `
+                <div class="font-medium text-blue-900">${concept}</div>
+            `;
+            conceptList.appendChild(conceptElement);
         });
     });
-
-    // Format numbers with commas
-    function formatNumber(num) {
-        return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    }
-
-    function updateCategoryTab(data) {
-        const categoryContent = document.getElementById('categoryContent');
-        const totalCategoriesSpan = document.getElementById('totalCategories');
-        
-        // Clear existing content
-        categoryContent.innerHTML = '';
-        
-        try {
-            // Get all stats files and combine their analyses
-            const allTopics = new Set();
-            const allConcepts = new Set();
-            const topicFrequency = {};
-            const conceptFrequency = {};
-            
-            // Process all documents
-            if (data.word_counts && data.word_counts.by_document) {
-                let processedCount = 0;
-                data.word_counts.by_document.forEach(doc => {
-                    const statFile = `/admin/api/lecture/${doc.name}`;
-                    fetch(statFile)
-                        .then(response => response.json())
-                        .then(stats => {
-                            processedCount++;
-                            if (stats.analysis && stats.analysis.topics) {
-                                // Process topics
-                                stats.analysis.topics.core_topics.forEach(topic => {
-                                    allTopics.add(topic);
-                                    topicFrequency[topic] = (topicFrequency[topic] || 0) + 1;
-                                });
-                                
-                                // Process concepts
-                                if (stats.analysis.concepts && stats.analysis.concepts.key_concepts) {
-                                    stats.analysis.concepts.key_concepts.forEach(concept => {
-                                        allConcepts.add(concept);
-                                        conceptFrequency[concept] = (conceptFrequency[concept] || 0) + 1;
-                                    });
-                                }
-                                
-                                // Only update display after all documents are processed
-                                if (processedCount === data.word_counts.by_document.length) {
-                                    // Update totals
-                                    totalCategoriesSpan.textContent = `${allTopics.size} Topics, ${allConcepts.size} Concepts`;
-                                    
-                                    // Create topic section
-                                    const topicSection = document.createElement('div');
-                                    topicSection.className = 'mb-8';
-                                    topicSection.innerHTML = `
-                                        <h4 class="text-lg font-semibold mb-4">Topics</h4>
-                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            ${Array.from(allTopics).map(topic => `
-                                                <div class="bg-blue-50 rounded-lg p-3">
-                                                    <div class="font-medium text-blue-900">${topic}</div>
-                                                    <div class="text-sm text-blue-700">Frequency: ${topicFrequency[topic]}</div>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    `;
-                                    
-                                    // Create concepts section
-                                    const conceptSection = document.createElement('div');
-                                    conceptSection.className = 'mb-8';
-                                    conceptSection.innerHTML = `
-                                        <h4 class="text-lg font-semibold mb-4">Concepts</h4>
-                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            ${Array.from(allConcepts).map(concept => `
-                                                <div class="bg-green-50 rounded-lg p-3">
-                                                    <div class="font-medium text-green-900">${concept}</div>
-                                                    <div class="text-sm text-green-700">Frequency: ${conceptFrequency[concept]}</div>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    `;
-                                    
-                                    // Clear and update content
-                                    categoryContent.innerHTML = '';
-                                    if (allTopics.size > 0) {
-                                        categoryContent.appendChild(topicSection);
-                                    }
-                                    if (allConcepts.size > 0) {
-                                        categoryContent.appendChild(conceptSection);
-                                    }
-                                    if (allTopics.size === 0 && allConcepts.size === 0) {
-                                        categoryContent.innerHTML = `
-                                            <div class="text-gray-500 text-center py-8">
-                                                No categories found in the analyzed content.
-                                            </div>
-                                        `;
-                                    }
-                                }
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error loading stats:', error);
-                            if (processedCount === 0) {
-                                categoryContent.innerHTML = `
-                                    <div class="text-red-500 text-center py-8">
-                                        Error loading category data. Please try again later.
-                                    </div>
-                                `;
-                            }
-                        });
-                });
-            } else {
-                categoryContent.innerHTML = `
-                    <div class="text-gray-500 text-center py-8">
-                        No analysis data available yet.
-                    </div>
-                `;
-                totalCategoriesSpan.textContent = '0 Categories';
-            }
-            
-        } catch (error) {
-            console.error('Error processing categories:', error);
-            categoryContent.innerHTML = `
-                <div class="text-red-500 text-center py-8">
-                    Error processing category data. Please try again later.
-                </div>
-            `;
-            totalCategoriesSpan.textContent = 'Error';
-        }
-    }
-
-    function updateTrendsTab(data) {
-        if (data.processing_stats) {
-            document.getElementById('totalChunks').textContent = formatNumber(data.processing_stats.total_chunks);
-            document.getElementById('totalSummaries').textContent = formatNumber(data.processing_stats.total_summaries);
-        }
-
-        // Update trends chart if you have time-series data
-        const trendsChart = new Chart(document.getElementById('trendsChart').getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: data.word_counts.by_document.map(doc => doc.name),
-                datasets: [{
-                    label: 'Words per Document',
-                    data: data.word_counts.by_document.map(doc => doc.words),
-                    borderColor: '#4f46e5',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-
-    function updateDashboard(data) {
-        // Update word count stats
-        document.getElementById('totalWordCount').textContent = formatNumber(data.word_counts.total);
-        document.getElementById('averageWordCount').textContent = formatNumber(data.word_counts.average);
-        document.getElementById('documentCount').textContent = data.total_documents;
-
-        // Word count distribution chart
-        new Chart(document.getElementById('wordCountChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: data.word_counts.by_document.map(doc => doc.name),
-                datasets: [{
-                    label: 'Word Count',
-                    data: data.word_counts.by_document.map(doc => doc.words),
-                    backgroundColor: '#4f46e5',
-                    borderColor: '#4338ca',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-        
-        // Update category tab
-        updateCategoryTab(data);
-        
-        // Update trends tab
-        updateTrendsTab(data);
-    }
-
-    // Fetch dashboard data
-    fetch('/admin/api/stats')
-        .then(response => response.json())
-        .then(data => {
-            updateDashboard(data);
-        })
-        .catch(error => {
-            console.error('Error fetching dashboard data:', error);
-            alert('Error loading dashboard data. Please try again later.');
-        });
-});
-</script>
-{% endblock %}
+    </script>
+</body>
+</html>

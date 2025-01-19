@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 import shutil
 import tempfile
+import threading
+import queue
+import logging
 
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,7 +16,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Import app and its components
-from app import app
+from app import app, validate_file, init_directories, setup_logging
 from transcribe.processor import create_logseq_note, process_video
 from config import settings
 
@@ -96,6 +99,36 @@ def test_status_endpoint(client):
     data = json.loads(response.data)
     assert data['status'] == 'running'
 
+def test_validate_file():
+    """Test file validation function"""
+    # Test valid file
+    valid_file = MockFile('test.mp4', content_length=1024)
+    assert validate_file(valid_file) is None
+
+    # Test no file
+    assert validate_file(None) == "No file provided"
+
+    # Test empty filename
+    no_name_file = MockFile('', content_length=1024)
+    assert validate_file(no_name_file) == "No file selected"
+
+    # Test file too large
+    large_file = MockFile('test.mp4', content_length=settings.MAX_FILE_SIZE + 1)
+    assert "File size exceeds" in validate_file(large_file)
+
+    # Test filename too long
+    long_name = 'a' * (settings.MAX_FILENAME_LENGTH + 1) + '.mp4'
+    long_file = MockFile(long_name)
+    assert "Filename too long" in validate_file(long_file)
+
+    # Test invalid extension
+    wrong_type = MockFile('test.txt', content_length=1024)
+    assert validate_file(wrong_type) == "File type not allowed"
+
+    # Test no extension
+    no_ext = MockFile('testfile', content_length=1024)
+    assert validate_file(no_ext) == "Invalid file format"
+
 def test_upload_no_file(client):
     """Test upload endpoint with no file"""
     response = client.post('/api/v1/process')
@@ -155,7 +188,7 @@ def test_create_logseq_note_missing_file(temp_dir):
     """Test Logseq note creation with missing summary file"""
     missing_file = temp_dir / "nonexistent.txt"
     result = create_logseq_note(missing_file, "Test")
-    assert result is None  # Function should return None for missing files
+    assert result is None
 
 def test_upload_valid_file(client, setup_directories, mock_video_file, monkeypatch):
     """Test upload with valid video file"""
@@ -195,9 +228,6 @@ def test_upload_valid_file(client, setup_directories, mock_video_file, monkeypat
 
 def test_concurrent_requests(client):
     """Test handling multiple concurrent requests"""
-    import threading
-    import queue
-    
     results = queue.Queue()
     
     def make_request():
@@ -234,23 +264,121 @@ def test_large_file_upload(client):
     assert "File size exceeds" in data['error']
     app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE  # Restore original limit
 
-def test_error_handler(client):
+def test_error_handler(client, monkeypatch):
     """Test global error handler"""
     # Test 404 error
     response = client.get('/nonexistent')
     assert response.status_code == 404
     data = json.loads(response.data)
-    assert 'error' in data
     assert data['error'] == 'Not Found'
+    
+    # Test 500 error without adding new route
+    def mock_process(*args, **kwargs):
+        raise Exception("Test error")
+    
+    # Use existing route with mocked function
+    monkeypatch.setattr('app.process_video', mock_process)
+    response = client.post('/api/v1/process', 
+                          data={'file': (BytesIO(b'test'), 'test.mp4')},
+                          content_type='multipart/form-data')
+    
+    assert response.status_code == 500
+    data = json.loads(response.data)
+    assert data['error'] == 'Test error'  # The actual error message, not 'Internal Server Error'
 
 def test_missing_directory_creation(temp_dir):
     """Test automatic creation of missing directories"""
-    # Test directory creation
-    for dir_name in ['uploads', 'audio', 'transcripts', 'summaries', 'logseq', 'stats']:
-        test_dir = temp_dir / dir_name
-        assert not test_dir.exists()  # Should not exist initially
+    test_base = temp_dir / "files"
+    test_base.mkdir(exist_ok=True)
+    
+    # Create test directory configuration matching app structure
+    test_dirs = {
+        "uploads": test_base / "uploads",
+        "audio": test_base / "audio",
+        "transcripts": test_base / "transcripts",
+        "summaries": test_base / "summaries",
+        "logseq": test_base / "logseq",
+        "stats": test_base / "stats"
+    }
+
+    try:
+        # Create base test dir
+        test_base.mkdir(exist_ok=True)
         
-        # Create directory
-        test_dir.mkdir(parents=True, exist_ok=True)
-        assert test_dir.exists()  # Should exist after creation
-        assert test_dir.is_dir()  # Should be a directory
+        # Create each required directory
+        for directory in test_dirs.values():
+            directory.mkdir(parents=True, exist_ok=True)
+            
+        # Verify directories were created
+        for dir_name, directory in test_dirs.items():
+            assert directory.exists(), f"Directory {dir_name} not created at {directory}"
+            assert directory.is_dir(), f"{dir_name} is not a directory at {directory}"
+            
+    finally:
+        # Clean up test directory
+        if test_base.exists():
+            shutil.rmtree(test_base)
+
+def test_setup_logging():
+    """Test logging setup"""
+    # Create temporary log directory
+    log_dir = Path('test_logs')
+    original_log_file = settings.LOG_FILE
+    settings.LOG_FILE = log_dir / 'test.log'
+    
+    try:
+        # Remove existing log directory if it exists
+        if log_dir.exists():
+            shutil.rmtree(log_dir)
+            
+        # Setup logging
+        setup_logging()
+        
+        # Verify log directory and file were created
+        assert log_dir.exists()
+        assert settings.LOG_FILE.exists()
+        
+        # Test logging
+        logger = logging.getLogger(__name__)
+        test_message = "Test log message"
+        logger.info(test_message)
+        
+        # Verify message was logged
+        with open(settings.LOG_FILE) as f:
+            log_content = f.read()
+            assert test_message in log_content
+            
+    finally:
+        # Cleanup
+        if log_dir.exists():
+            shutil.rmtree(log_dir)
+        settings.LOG_FILE = original_log_file
+
+def test_process_video_cleanup(client, setup_directories, mock_video_file, monkeypatch):
+    """Test cleanup after video processing"""
+    def mock_process(file_path, title):
+        raise Exception("Processing failed")
+    
+    monkeypatch.setattr('app.process_video', mock_process)
+    
+    data = {
+        'file': (BytesIO(mock_video_file.content), mock_video_file.filename),
+        'title': 'Test Video'
+    }
+    
+    response = client.post(
+        '/api/v1/process',
+        data=data,
+        content_type='multipart/form-data'
+    )
+    
+    assert response.status_code == 500
+    # Verify uploaded file was cleaned up
+    uploaded_files = list(setup_directories['uploads'].glob('*'))
+    assert len(uploaded_files) == 0
+
+def test_chat_endpoint(client):
+    """Test chat endpoint"""
+    response = client.get('/chat')
+    assert response.status_code == 200
+    assert b'<!DOCTYPE html>' in response.data

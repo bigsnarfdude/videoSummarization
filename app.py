@@ -21,6 +21,7 @@ from transcribe.transcribe import transcribe
 from transcribe.summarize_model import split_text, summarize_in_parallel, save_summaries
 from transcribe.utils import get_filename
 from flask_cors import CORS
+
 # First, ensure required directories exist
 def init_directories():
     """Initialize all required directories including logs"""
@@ -34,7 +35,6 @@ def init_directories():
 
 # Initialize directories before importing settings or other modules
 init_directories()
-
 
 # Setup logging
 def setup_logging():
@@ -92,6 +92,8 @@ app.register_blueprint(api_bp)
 setup_logging()
 logger = logging.getLogger(__name__)
 
+# Use transcripts directory from settings
+TRANSCRIPTS_DIR = settings.OUTPUT_DIRS["transcripts"]
 
 def prepare_context(history: List[str], context: str, query: str) -> str:
     """Prepare context for the model by combining history, context, and query"""
@@ -129,30 +131,24 @@ def query_ollama(prompt: str) -> str:
         logger.error(f"Unexpected error in query_ollama: {str(e)}")
         return f"Unexpected error: {str(e)}"
 
-
-
-TRANSCRIPTS_DIR = "/Users/vincent/Downloads/videoSummarization/files/transcripts"
-
 @app.route('/list-transcripts', methods=['GET'])
 def list_transcripts():
     """List all available transcript files."""
     try:
-        files = os.listdir(TRANSCRIPTS_DIR)
-        txt_files = [f for f in files if f.endswith('.txt')]
+        files = list(TRANSCRIPTS_DIR.glob('*.txt'))
+        txt_files = [f.name for f in files]
         return jsonify({'files': txt_files}), 200
     except Exception as e:
         logger.error(f"Error listing transcripts: {e}")
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/transcripts/<filename>', methods=['GET'])
 def serve_transcript(filename):
     """Serve a transcript file by name."""
     try:
-        return send_from_directory(TRANSCRIPTS_DIR, filename, as_attachment=False)
+        return send_from_directory(str(TRANSCRIPTS_DIR), filename, as_attachment=False)
     except FileNotFoundError:
         return jsonify({'error': f"File '{filename}' not found"}), 404
-
 
 @app.route('/chat')
 def chat_page():
@@ -199,7 +195,6 @@ def chat_with_ollama():
             'details': traceback.format_exc()
         }), 500
 
-
 def validate_file(file) -> Optional[str]:
     """Validate uploaded file"""
     if not file:
@@ -226,7 +221,6 @@ def validate_file(file) -> Optional[str]:
 def home():
     """Render video upload page"""
     return render_template('index.html')
-
 
 @app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
 def process_video_endpoint() -> Tuple[Dict[str, Any], int]:

@@ -11,7 +11,7 @@ import queue
 import logging
 import requests
 
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock, PropertyMock, call
 from flask import url_for
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -24,6 +24,7 @@ if project_root not in sys.path:
 from app import app, validate_file, init_directories, setup_logging, query_ollama, prepare_context
 from transcribe.processor import create_logseq_note, process_video
 from config import settings
+
 
 class MockFile:
     """Mock file object for testing"""
@@ -699,10 +700,6 @@ def test_404_error_handler_details(client):
     assert data['error'] == 'Not Found'
 
 
-
-#### haiku 2
-
-
 def test_home_page_content(client):
     """Test that the home page renders the correct template"""
     response = client.get('/')
@@ -753,9 +750,6 @@ def test_chat_endpoint_json_parsing_edge_cases(client):
         response = client.post('/ollama/chat', json={'query': 'Hello'}, content_type='application/json')
         assert response.status_code == 200
 
-    
-
-
 def test_validate_file_edge_cases():
     """Test file validation with edge case file inputs"""
     class MockFile:
@@ -774,3 +768,167 @@ def test_validate_file_edge_cases():
     # Test file with content length exceeding max file size
     large_file = MockFile('test.mp4', content_length=settings.MAX_FILE_SIZE + 1)
     assert "File size exceeds" in validate_file(large_file)
+
+
+def test_init_directories_permission_error():
+    """Test initialization when directory permissions can't be set"""
+    with patch('pathlib.Path.chmod') as mock_chmod:
+        mock_chmod.side_effect = PermissionError("Permission denied")
+        init_directories()  # Should handle the error gracefully
+
+
+def test_setup_logging_file_handler_error():
+    """Test logging setup when file handler creation fails"""
+    with patch('logging.handlers.RotatingFileHandler') as mock_handler:
+        mock_handler.side_effect = PermissionError("Permission denied")
+        with pytest.raises(Exception):
+            setup_logging()
+
+def test_query_ollama_edge_cases():
+    """Test various Ollama API error scenarios"""
+    with patch('requests.post') as mock_post:
+        # Test timeout
+        mock_post.side_effect = requests.Timeout("Request timed out")
+        response = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in response
+
+        # Test JSON decode error
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.side_effect = ValueError("Invalid JSON")
+        mock_post.side_effect = None
+        mock_post.return_value = mock_response
+        response = query_ollama("test prompt")
+        assert "Unexpected error" in response
+
+def test_process_video_cleanup_error():
+    """Test error handling during file cleanup"""
+    with patch('pathlib.Path.unlink') as mock_unlink:
+        mock_unlink.side_effect = PermissionError("Permission denied")
+        
+        # Setup a mock file
+        mock_file = MagicMock()
+        mock_file.filename = "test.mp4"
+        
+        with app.test_client() as client:
+            response = client.post(
+                f'{settings.API_PREFIX}/process',
+                data={'file': (BytesIO(b'test'), 'test.mp4')}
+            )
+            # Should complete despite cleanup error
+            assert response.status_code in [400, 500]  # Depends on earlier processing
+
+def test_large_file_error_detailed():
+    """Test detailed error handling for large files"""
+    original_max_size = app.config['MAX_CONTENT_LENGTH']
+    app.config['MAX_CONTENT_LENGTH'] = 100  # Set very small limit
+    
+    try:
+        with app.test_client() as client:
+            data = {'file': (BytesIO(b'x' * 200), 'test.mp4')}
+            response = client.post(
+                f'{settings.API_PREFIX}/process',
+                data=data,
+                content_type='multipart/form-data'
+            )
+            assert response.status_code == 400
+            data = response.get_json()
+            assert 'error' in data
+            assert 'MB limit' in data['error']
+    finally:
+        app.config['MAX_CONTENT_LENGTH'] = original_max_size
+
+def test_log_file_permission_error():
+    """Test handling of log file permission errors"""
+    with patch('pathlib.Path.chmod') as mock_chmod:
+        mock_chmod.side_effect = PermissionError("Permission denied")
+        with patch('logging.getLogger') as mock_logger:
+            setup_logging()
+            mock_logger.return_value.warning.assert_called_with(
+                "Could not set log file permissions: Permission denied"
+            )
+
+
+
+def test_file_cleanup_error():
+    """Test file cleanup error handling (lines 285-288)"""
+    with app.test_client() as client:
+        with patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.unlink') as mock_unlink:
+            mock_unlink.side_effect = PermissionError("Permission denied")
+            
+            response = client.post(
+                f'{settings.API_PREFIX}/process',
+                data={'file': (BytesIO(b'test'), 'test.mp4')}
+            )
+            # Should complete despite cleanup error
+            assert response.status_code in [400, 500]
+
+
+
+
+def test_query_ollama_response_handling():
+    """Test Ollama API response handling"""
+    with patch('requests.post') as mock_post:
+        # Test invalid JSON response
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {}  # Empty response
+        mock_post.return_value = mock_response
+        
+        response = query_ollama("test prompt")
+        assert response == "No response received"
+        
+        # Test network timeout
+        mock_post.side_effect = requests.Timeout("Request timed out")
+        response = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in response
+        
+        # Test HTTP error
+        mock_post.side_effect = requests.HTTPError("Internal server error")
+        response = query_ollama("test prompt")
+        assert "Error connecting to Ollama" in response
+
+
+def test_rotating_file_handler_error():
+    """Test error handling when creating rotating file handler"""
+    with patch('logging.handlers.RotatingFileHandler') as mock_handler:
+        mock_handler.side_effect = PermissionError("Permission denied")
+        with patch('sys.stderr') as mock_stderr:
+            with pytest.raises(PermissionError) as exc_info:
+                setup_logging()
+                
+            # Check the actual error message
+            assert "Permission denied" in str(exc_info.value)
+            
+            # Check that both write calls were made
+            assert mock_stderr.write.call_count == 2
+            mock_stderr.write.assert_has_calls([
+                call("Error setting up logging: Permission denied"),
+                call("\n")
+            ])
+
+def test_general_exception_handler():
+    """Test general exception handler (lines 340-346)"""
+    with app.test_client() as client:
+        with patch('app.process_video') as mock_process:
+            # Create a custom error
+            mock_process.side_effect = ValueError("Test error")
+            
+            # Send request that will trigger the error
+            response = client.post(
+                f'{settings.API_PREFIX}/process',
+                data={
+                    'file': (BytesIO(b'test content'), 'test.mp4')
+                },
+                content_type='multipart/form-data'
+            )
+            
+            # Verify response
+            assert response.status_code == 500
+            data = response.get_json()
+            assert data['error'] == 'Test error'  # The actual error message
+            assert 'details' in data  # Traceback should be present
+            assert 'type' in data     # Error type should be present
+            assert data['type'] == 'ValueError'
+

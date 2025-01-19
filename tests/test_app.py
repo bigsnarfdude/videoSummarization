@@ -931,4 +931,3 @@ def test_general_exception_handler():
             assert 'details' in data  # Traceback should be present
             assert 'type' in data     # Error type should be present
             assert data['type'] == 'ValueError'
-

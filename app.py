@@ -136,22 +136,30 @@ def chat_page():
 @app.route('/ollama/chat', methods=['POST'])
 def chat_with_ollama():
     """Handle chat requests"""
+    # First, check the raw request data
+    if request.data == b'' or request.data is None:
+        return jsonify({'error': 'No data provided'}), 400
+    
     try:
-        # First check if we received any JSON data
+        # Check if we received any JSON data
         if not request.is_json:
             return jsonify({'error': 'No data provided'}), 400
-            
-        data = request.get_json()
-        # Empty JSON object is still valid data, just missing required fields
-        query = data.get('query', '').strip()
-        if not query:
+        
+        # Explicitly handle None data
+        data = request.get_json(silent=True)
+        if data is None:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Convert query to string and strip, with None check
+        query = data.get('query')
+        if query is None or not str(query).strip():
             return jsonify({'error': 'Query is required'}), 400
 
         history = data.get('history', [])
         context = data.get('context', '')
 
         # Prepare context for the model
-        prompt = prepare_context(history, context, query)
+        prompt = prepare_context(history, context, str(query))
 
         # Get response from Ollama
         response = query_ollama(prompt)
@@ -160,10 +168,12 @@ def chat_with_ollama():
 
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'error': str(e),
+            'details': traceback.format_exc()
+        }), 500
 
 
-# Validate file
 def validate_file(file) -> Optional[str]:
     """Validate uploaded file"""
     if not file:
@@ -172,8 +182,12 @@ def validate_file(file) -> Optional[str]:
         return "No file selected"
     if len(file.filename) > settings.MAX_FILENAME_LENGTH:
         return f"Filename too long (max {settings.MAX_FILENAME_LENGTH} characters)"
-    if hasattr(file, 'content_length') and file.content_length > settings.MAX_FILE_SIZE:
+    
+    # Safely handle content_length with a default of 0
+    content_length = getattr(file, 'content_length', 0) or 0
+    if content_length > settings.MAX_FILE_SIZE:
         return f"File size exceeds {settings.MAX_FILE_SIZE/(1024*1024)}MB limit"
+    
     if '.' not in file.filename:
         return "Invalid file format"
     ext = file.filename.rsplit('.', 1)[1].lower()

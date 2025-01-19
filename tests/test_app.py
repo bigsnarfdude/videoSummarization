@@ -597,3 +597,180 @@ def test_ollama_chat_system_error(client):
         data = json.loads(response.data)
         assert 'error' in data
         assert 'System error' in data['error']
+
+######## not sure these are needed
+
+def test_query_ollama_server_error(monkeypatch):
+    """Test Ollama API when server returns an error response"""
+    import requests
+
+    def mock_post(*args, **kwargs):
+        mock_response = MagicMock()
+        mock_response.raise_for_status.side_effect = requests.HTTPError("Server error")
+        return mock_response
+    
+    monkeypatch.setattr(requests, 'post', mock_post)
+    
+    result = query_ollama("test prompt")
+    assert "Error connecting to Ollama" in result
+
+def test_prepare_context_long_inputs():
+    """Test context preparation with extremely long inputs"""
+    long_history = ['Long message ' * 100] * 5  # Very long messages
+    long_context = 'Long context ' * 200  # Extremely long context
+    long_query = 'Very long query ' * 50
+
+    result = prepare_context(long_history, long_context, long_query)
+    
+    # Verify basic structure is maintained
+    assert 'Context:' in result
+    assert 'Previous conversation:' in result
+    assert 'Current query:' in result
+
+def test_chat_endpoint_missing_json_content(client):
+    """Test chat endpoint with malformed JSON"""
+    # Send request with no content type
+    response = client.post('/ollama/chat', data='invalid json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert 'error' in data
+
+def test_file_validation_edge_cases():
+    """Test file validation with various edge case scenarios"""
+    class MockFile:
+        def __init__(self, filename, content_length=None):
+            self.filename = filename
+            self.content_length = content_length
+
+    # Test filename with multiple dots
+    file1 = MockFile('video.special.mp4', content_length=100)
+    assert validate_file(file1) is None
+
+    # Test filename with no extension but within allowed name length
+    file2 = MockFile('videofile', content_length=100)
+    assert validate_file(file2) == "Invalid file format"
+
+    # Test filename with uppercase extension
+    file3 = MockFile('video.MP4', content_length=100)
+    assert validate_file(file3) is None
+
+def test_process_video_endpoint_without_title(client, mock_video_file):
+    """Test video processing endpoint without explicit title"""
+    data = {
+        'file': (BytesIO(mock_video_file.content), mock_video_file.filename)
+    }
+    
+    # Mock process_video to return a predefined result
+    with patch('app.process_video') as mock_process:
+        mock_process.return_value = {
+            'audio_path': Path('test_audio.wav'),
+            'transcript_path': Path('test_transcript.txt'),
+            'summary_path': Path('test_summary.txt'),
+            'logseq_path': Path('test_logseq.md'),
+            'stats_path': Path('test_stats.json')
+        }
+        
+        response = client.post(
+            f'{settings.API_PREFIX}/process', 
+            data=data,
+            content_type='multipart/form-data'
+        )
+        
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['status'] == 'success'
+    assert 'files' in data
+
+def test_status_endpoint_details(client):
+    """Test status endpoint returns expected structure"""
+    response = client.get('/status')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'status' in data
+    assert data['status'] == 'running'
+
+def test_404_error_handler_details(client):
+    """Test 404 error handler provides detailed information"""
+    response = client.get('/totally-nonexistent-route')
+    assert response.status_code == 404
+    data = json.loads(response.data)
+    assert 'error' in data
+    assert 'message' in data
+    assert data['error'] == 'Not Found'
+
+
+
+#### haiku 2
+
+
+def test_home_page_content(client):
+    """Test that the home page renders the correct template"""
+    response = client.get('/')
+    assert response.status_code == 200
+    assert b'<!DOCTYPE html>' in response.data
+
+def test_chat_endpoint_json_parsing_edge_cases(client):
+    """Test chat endpoint with edge case JSON inputs"""
+    # Test with None as the entire JSON body
+    response = client.post('/ollama/chat', data=None, content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'No data provided'
+
+    # Test with empty request body
+    response = client.post('/ollama/chat', data='', content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'No data provided'
+
+    # Test with invalid JSON
+    response = client.post('/ollama/chat', data='invalid json', content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'No data provided'
+
+    # Test with empty JSON object
+    response = client.post('/ollama/chat', json={}, content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'Query is required'
+
+    # Test with query as None
+    response = client.post('/ollama/chat', json={'query': None}, content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'Query is required'
+
+    # Test with whitespace query
+    response = client.post('/ollama/chat', json={'query': '   '}, content_type='application/json')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert data['error'] == 'Query is required'
+
+    # Test with valid query (mock the Ollama response if needed)
+    with patch('app.query_ollama') as mock_query:
+        mock_query.return_value = "Test response"
+        response = client.post('/ollama/chat', json={'query': 'Hello'}, content_type='application/json')
+        assert response.status_code == 200
+
+    
+
+
+def test_validate_file_edge_cases():
+    """Test file validation with edge case file inputs"""
+    class MockFile:
+        def __init__(self, filename, content_length=None):
+            self.filename = filename
+            self.content_length = content_length
+
+    # Test file with no content length (should not raise an error)
+    no_length_file = MockFile('test.mp4')
+    assert validate_file(no_length_file) is None
+
+    # Test file with zero content length
+    zero_length_file = MockFile('test.mp4', content_length=0)
+    assert validate_file(zero_length_file) is None
+
+    # Test file with content length exceeding max file size
+    large_file = MockFile('test.mp4', content_length=settings.MAX_FILE_SIZE + 1)
+    assert "File size exceeds" in validate_file(large_file)

@@ -232,7 +232,6 @@ def chat_page():
     """Render chat interface page"""
     return render_template('chat.html')
 
-
 @app.route('/ollama/chat', methods=['POST'])
 def chat_with_ollama():
     """Handle chat requests with improved error handling"""
@@ -241,43 +240,38 @@ def chat_with_ollama():
     
     data = request.get_json()
     query = data.get('query')
+    chat_file = data.get('log_file', 'chat_history.log')
+    
     if not query or not str(query).strip():
         return jsonify({'error': 'Query is required'}), 400
         
     try:
-        data = request.get_json(silent=True)
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-
-        query = data.get('query')
-        if not query or not str(query).strip():
-            return jsonify({'error': 'Query is required'}), 400
-
-        # Check Ollama status before proceeding
         if not check_ollama_status():
             return jsonify({'error': 'Ollama service is not available'}), 503
 
         history = data.get('history', [])
         context = data.get('context', '')
-
         prompt = prepare_context(history, context, str(query))
-
-        # Get the chat logger
+        
+        # Configure chat logging for this session
         chat_logger = logging.getLogger('chat')
-
-        # Log the chat input
-        chat_logger.info(f"User query: {query}")
-
-        response = query_ollama(prompt)
-
-        # Log the chat output
-        chat_logger.info(f"Ollama response: {response}")
-
-        if response.startswith('Error:'):
-            return jsonify({'error': response}), 500
-
-        return jsonify({'response': response}), 200
-
+        chat_file_handler = logging.FileHandler(f'logs/{chat_file}')
+        chat_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        chat_logger.addHandler(chat_file_handler)
+        
+        try:
+            chat_logger.info(f"User query: {query}")
+            response = query_ollama(prompt)
+            chat_logger.info(f"Ollama response: {response}")
+            
+            if response.startswith('Error:'):
+                return jsonify({'error': response}), 500
+                
+            return jsonify({'response': response}), 200
+            
+        finally:
+            chat_logger.removeHandler(chat_file_handler)
+            
     except Exception as e:
         logger.error(f"Chat error: {str(e)}")
         return jsonify({

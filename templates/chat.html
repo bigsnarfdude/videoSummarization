@@ -124,6 +124,10 @@
                 const query = elements.queryInput.value.trim();
                 if (!query) return;
 
+                const selectedFile = elements.transcriptSelect.value;
+                const chatLogName = selectedFile ? `chat_history_${selectedFile.split('.')[0]}.log` : 'chat_history.log';
+                const timestamp = new Date().toISOString();
+
                 const spinner = document.getElementById('loadingSpinner');
                 elements.sendBtn.disabled = true;
                 spinner.classList.remove('hidden');
@@ -136,7 +140,8 @@
                         body: JSON.stringify({
                             query,
                             history: messages,
-                            context: elements.contextArea.value
+                            context: elements.contextArea.value,
+                            log_file: chatLogName
                         })
                     });
 
@@ -146,7 +151,7 @@
                         throw new Error(data.error || 'Failed to get response');
                     }
 
-                    messages.push(query, data.response);
+                    messages.push(`[${timestamp}] User: ${query}`, `[${timestamp}] Assistant: ${data.response}`);
                     updateMessages();
                     elements.queryInput.value = '';
                 } catch (error) {

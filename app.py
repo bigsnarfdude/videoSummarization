@@ -142,41 +142,34 @@ def prepare_context(history: List[str], context: str, query: str) -> str:
 
 
 def query_ollama(prompt: str, retries: int = OLLAMA_RETRY_ATTEMPTS) -> str:
-    """Query the Ollama API with retries and improved error handling"""
     if not check_ollama_status():
-        return "Error: Ollama service is not running. Please start Ollama using 'ollama serve'"
+        return "Error: Ollama service is not available"
 
     if not check_model_availability("phi4"):
-        return "Error: phi4 model is not available. Please run 'ollama pull phi4'"
+        return "Error: Model not available"
 
     for attempt in range(retries):
         try:
-            logger.info(f"Sending request to Ollama (attempt {attempt + 1}/{retries})")
             response = requests.post(
                 f'{OLLAMA_BASE_URL}/api/generate',
-                json={
-                    "model": "phi4:latest",
-                    "prompt": prompt,
-                    "stream": False
-                },
+                json={"model": "phi4:latest", "prompt": prompt, "stream": False},
                 timeout=OLLAMA_TIMEOUT
             )
             response.raise_for_status()
             data = response.json()
-            logger.info("Successfully received response from Ollama")
             return data.get('response', 'No response received')
-        except requests.exceptions.ConnectionError:
+        except requests.ConnectionError:
             if attempt == retries - 1:
-                return "Cannot connect to Ollama. Please check if the service is running."
+                return "Error connecting to Ollama"
         except requests.Timeout:
             if attempt == retries - 1:
-                return "Request timed out. The model might be loading or the server is busy."
+                return "Error connecting to Ollama"
+        except requests.HTTPError as e:
+            return f"Error connecting to Ollama: {str(e)}"
         except Exception as e:
-            logger.error(f"Unexpected error querying Ollama: {str(e)}")
-            return f"Error: {str(e)}"
+            return f"Unexpected error: {str(e)}"
     
     return "Error: Maximum retry attempts reached"
-
 
 
 @app.route('/ollama/status')

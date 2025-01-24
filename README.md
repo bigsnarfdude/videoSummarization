@@ -68,6 +68,7 @@ Access interfaces:
 - Main interface: http://localhost:5000
 - Admin dashboard: http://localhost:5000/admin
 - Chat interface: http://localhost:5000/chat
+- Reports interface: http://localhost:5000/reports
 
 ## API Endpoints
 

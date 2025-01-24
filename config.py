@@ -10,6 +10,12 @@ class TranscriptionConfig(TypedDict):
     beam_size: int
     language: str
 
+class OllamaConfig(TypedDict):
+    base_url: str
+    model: str
+    timeout: int
+    max_tokens: int
+
 class Settings(BaseSettings):
     """Application settings with validation using Pydantic"""
     
@@ -27,7 +33,6 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = ["mp4", "avi", "mov", "mkv"]
     MAX_FILENAME_LENGTH: int = 100
     
-    MLX_MODEL_NAME: str = "mlx-community/phi-4-8bit"
     WINDOW_SIZE: int = 4096
     
     BASE_DIR: Path = Path(__file__).resolve().parent
@@ -55,34 +60,18 @@ class Settings(BaseSettings):
         "beam_size": 5,
         "language": "en"
     }
+
+    OLLAMA_CONFIG: OllamaConfig = {
+        "base_url": "http://localhost:11434",
+        "model": "phi",  # or your preferred model
+        "timeout": 120,
+        "max_tokens": 1024
+    }
     
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=True
     )
-    
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._init_directories()
-    
-    def _init_directories(self) -> None:
-        """Initialize all required directories"""
-        os.makedirs(self.BASE_DIR / "logs", exist_ok=True)
-        
-        for directory in self.OUTPUT_DIRS.values():
-            os.makedirs(directory, exist_ok=True)
-    
-    @property
-    def is_development(self) -> bool:
-        return self.APP_ENV == "development"
-    
-    @property
-    def is_production(self) -> bool:
-        return self.APP_ENV == "production"
-    
-    @property
-    def is_testing(self) -> bool:
-        return self.APP_ENV == "testing"
 
 settings = Settings()

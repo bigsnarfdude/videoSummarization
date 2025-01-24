@@ -1,143 +1,91 @@
 import argparse
-import os
-import sys
 import logging
-import traceback
-from transcribe.summarize_model import save_summaries, split_text, summarize_in_parallel
+import sys
+from pathlib import Path
+from typing import Optional
+
 from transcribe.transcribe import transcribe
-from transcribe.get_video import convert_to_wav, process_local_video
+from transcribe.get_video import process_local_video
+from transcribe.summarize_model import split_text, summarize_in_parallel, save_summaries
 from transcribe.utils import get_filename
+from config import settings
 
-LOG_FILE = "transcribe.log"
-SUMMARIES_DIR = "files/summaries"
-LOGSEQ_DIR = "files/logseq"
-
-def setup_logging():
+def setup_logging(log_file: str = "transcribe.log") -> None:
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    
-    file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+    handlers = [
+        logging.FileHandler(log_file),
+        logging.StreamHandler(sys.stdout)
+    ]
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+    logging.getLogger().setLevel(logging.INFO)
 
-def create_logseq_note(summary_path, title):
-    """Creates a Logseq note from a summary file."""
-    if not os.path.exists(summary_path):
+def create_logseq_note(summary_path: Path, title: str) -> Optional[Path]:
+    if not summary_path.exists():
         raise FileNotFoundError(f"Summary file not found: {summary_path}")
-        
-    with open(summary_path, "r") as f:
-        lines = f.readlines()
-        
+
+    lines = summary_path.read_text().splitlines()
     if not lines:
         raise ValueError(f"Summary file is empty: {summary_path}")
 
-    formatted_lines = ["    " + line for line in lines]
+    logseq_path = settings.OUTPUT_DIRS["logseq"] / f"{summary_path.stem}.md"
+    logseq_path.parent.mkdir(parents=True, exist_ok=True)
 
-    summary_filename = os.path.basename(summary_path)
-    logseq_filename = os.path.splitext(summary_filename)[0] + ".md"
-    logseq_note_path = os.path.join(LOGSEQ_DIR, logseq_filename)
-    os.makedirs(os.path.dirname(logseq_note_path), exist_ok=True)
-
-    with open(logseq_note_path, "w") as f:
+    with logseq_path.open('w') as f:
         f.write(f"- summarized [[{title}]]\n")
         f.write("- [[summary]]\n")
-        f.writelines(formatted_lines)
-    
-    logging.info(f"✓ Created Logseq note: {logseq_note_path}")
-    return logseq_note_path
+        f.writelines(f"    {line}\n" for line in lines)
 
-def call_mlx_model(text_path, title):
-    """Summarizes text using the MLX model."""
-    if not os.path.exists(text_path):
-        raise FileNotFoundError(f"Text file not found: {text_path}")
-        
-    filename_only = get_filename(text_path)
-    
-    try:
-        if os.path.getsize(text_path) == 0:
-            raise ValueError(f"Text file is empty: {text_path}")
+    logging.info(f"✓ Created Logseq note: {logseq_path}")
+    return logseq_path
 
-        logging.info("Starting text splitting...")
-        chunks = split_text(text_path=text_path, title=title)
-        if not chunks:
-            raise RuntimeError("Text splitting produced no chunks")
-        logging.info(f"✓ Split text into {len(chunks)} chunks")
-
-        logging.info("Generating summaries...")
-        summaries = summarize_in_parallel(chunks, title)
-        if not any(summaries):
-            raise RuntimeError("No valid summaries were generated")
-            
-        summary_path = save_summaries(summaries, filename_only)
-        logging.info(f"✓ Created summary: {summary_path}")
-        
-        if not os.path.exists(summary_path) or os.path.getsize(summary_path) == 0:
-            raise RuntimeError(f"Summary file is empty or missing: {summary_path}")
-            
-        return summary_path
-        
-    except Exception as e:
-        logging.error(f"Summarization failed: {str(e)}")
-        logging.debug(traceback.format_exc())
-        raise
-
-def process_local(input_path, title):
-    """Processes a local video file."""
-    if not os.path.isfile(input_path):
+def process_video(input_path: Path, title: str) -> None:
+    if not input_path.is_file():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    logging.info(f"Starting processing of: {input_path}")
+    logging.info(f"Processing: {input_path}")
     
-    try:
-        logging.info("Converting video to audio...")
-        audio_path = process_local_video(input_path)
-        if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-            raise RuntimeError(f"Audio extraction failed or produced empty file: {audio_path}")
-        logging.info(f"✓ Created audio file: {audio_path}")
+    # Convert video to audio
+    audio_path = process_local_video(str(input_path))
+    if not Path(audio_path).exists():
+        raise RuntimeError(f"Audio extraction failed: {audio_path}")
+    logging.info(f"✓ Created audio: {audio_path}")
 
-        logging.info("Starting transcription (this may take several minutes)...")
-        elapsed_time, transcript, transcript_path = transcribe(audio_path)
-        if not os.path.exists(transcript_path) or os.path.getsize(transcript_path) == 0:
-            raise RuntimeError(f"Transcription failed or produced empty file: {transcript_path}")
-        logging.info(f"✓ Completed transcription in {elapsed_time} seconds")
-        logging.info(f"✓ Created transcript: {transcript_path}")
+    # Transcribe audio
+    elapsed_time, transcript, transcript_path = transcribe(audio_path)
+    if not Path(transcript_path).exists():
+        raise RuntimeError(f"Transcription failed: {transcript_path}")
+    logging.info(f"✓ Transcribed in {elapsed_time}s: {transcript_path}")
 
-        logging.info("Starting summarization...")
-        summary_path = call_mlx_model(transcript_path, title)
-        logging.info("✓ Completed summarization")
-        
-        logging.info("Creating Logseq note...")
-        logseq_path = create_logseq_note(summary_path, title)
-        
-        logging.info("\nProcessing completed successfully!")
-        logging.info("Generated files:")
-        logging.info(f"  Audio:      {audio_path}")
-        logging.info(f"  Transcript: {transcript_path}")
-        logging.info(f"  Summary:    {summary_path}")
-        logging.info(f"  Logseq:     {logseq_path}")
+    # Generate summary
+    chunks = split_text(transcript_path, title)
+    summaries = summarize_in_parallel(chunks, title)
+    summary_path = save_summaries(summaries, get_filename(transcript_path))
+    logging.info(f"✓ Created summary: {summary_path}")
 
-    except Exception as e:
-        logging.error(f"Processing failed: {str(e)}")
-        logging.debug(traceback.format_exc())
-        raise
+    # Create Logseq note
+    logseq_path = create_logseq_note(Path(summary_path), title)
+    
+    logging.info("\nProcessing completed:")
+    logging.info(f"  Audio:      {audio_path}")
+    logging.info(f"  Transcript: {transcript_path}")
+    logging.info(f"  Summary:    {summary_path}")
+    logging.info(f"  Logseq:     {logseq_path}")
 
-if __name__ == "__main__":
+def main():
     setup_logging()
-    
-    parser = argparse.ArgumentParser(description="Process local video files.")
-    parser.add_argument("--input_path", type=str, help="Path to the local video file", required=True)
-    parser.add_argument("--title", type=str, help="Title of the video", required=True)
+    parser = argparse.ArgumentParser(description="Process video files for transcription and summarization.")
+    parser.add_argument("--input", "-i", type=str, required=True, help="Path to video file")
+    parser.add_argument("--title", "-t", type=str, required=True, help="Video title")
 
     args = parser.parse_args()
 
     try:
-        process_local(args.input_path, args.title)
+        process_video(Path(args.input), args.title)
     except Exception as e:
-        logging.error(f"Error: {str(e)}")
+        logging.error(f"Error: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    main()

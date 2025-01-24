@@ -24,6 +24,17 @@ OLLAMA_BASE_URL = 'http://localhost:11434'
 OLLAMA_TIMEOUT = 120
 OLLAMA_RETRY_ATTEMPTS = 3
 
+app = Flask(__name__, 
+    template_folder=Path(__file__).parent / "templates",
+    static_folder=Path(__file__).parent / "static"
+)
+
+# Then add a proper root route:
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
 def init_directories():
     """Initialize required directories"""
     log_dir = Path('logs')

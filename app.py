@@ -157,6 +157,25 @@ def query_ollama(prompt: str, retries: int = OLLAMA_RETRY_ATTEMPTS) -> str:
 
     return "Error: Maximum retry attempts reached"
 
+@app.route('/reports')
+def reports_page():
+    return render_template('reports.html')
+
+@app.route('/api/v1/downloads/<file_type>/<filename>')
+def download_file(file_type, filename):
+    directories = {
+        'audio': settings.OUTPUT_DIRS["audio"],
+        'transcripts': settings.OUTPUT_DIRS["transcripts"], 
+        'summaries': settings.OUTPUT_DIRS["summaries"],
+        'logseq': settings.OUTPUT_DIRS["logseq"]
+    }
+    
+    if file_type not in directories:
+        return jsonify({'error': 'Invalid file type'}), 400
+        
+    return send_from_directory(directories[file_type], filename)
+
+    
 @app.route('/ollama/status')
 def ollama_status():
     service_status = check_ollama_status()

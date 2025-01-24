@@ -1,9 +1,8 @@
 from collections import Counter, defaultdict
 import re
-from typing import Dict, List, Tuple, Set, Optional
-import numpy as np
+from typing import Dict, List, Optional
 from pathlib import Path
-from mlx_lm import load, generate
+import requests
 from config import settings
 import logging
 
@@ -11,15 +10,12 @@ logger = logging.getLogger(__name__)
 
 class MathLectureAnalyzer:
     def __init__(self, transcript_dir: Optional[str] = None):
-        """Initialize the analyzer with optional transcript directory"""
         self.transcript_dir = Path(transcript_dir) if transcript_dir else None
-        self.model, self.tokenizer = self._init_phi4()
         self.lectures = []
         if transcript_dir:
             self.lectures = self._load_lectures()
 
     def _load_lectures(self) -> List[Dict]:
-        """Load lectures from transcript directory"""
         lectures = []
         if not self.transcript_dir or not self.transcript_dir.exists():
             logger.warning(f"Transcript directory not found: {self.transcript_dir}")
@@ -46,37 +42,27 @@ class MathLectureAnalyzer:
             logger.error(f"Error loading lectures: {e}")
             return []
 
-    def _init_phi4(self):
-        """Initialize Phi-4 model"""
+    def _generate_analysis(self, prompt: str) -> str:
         try:
-            model, tokenizer = load(settings.MLX_MODEL_NAME)
-            logger.info("Successfully initialized Phi-4 model")
-            return model, tokenizer
-        except Exception as e:
-            logger.error(f"Error loading Phi-4 model: {e}")
-            return None, None
-
-    def _generate_phi4_analysis(self, prompt: str) -> str:
-        """Generate analysis using Phi-4"""
-        if not self.model or not self.tokenizer:
-            logger.error("Model or tokenizer not initialized")
-            return ""
-            
-        try:
-            response = generate(
-                self.model,
-                self.tokenizer,
-                prompt=prompt,
-                max_tokens=1024,
-                verbose=False
+            response = requests.post(
+                f"{settings.OLLAMA_CONFIG['base_url']}/api/generate",
+                json={
+                    "model": settings.OLLAMA_CONFIG["model"],
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {
+                        "num_predict": settings.OLLAMA_CONFIG["max_tokens"]
+                    }
+                },
+                timeout=settings.OLLAMA_CONFIG["timeout"]
             )
-            return response
+            response.raise_for_status()
+            return response.json().get("response", "")
         except Exception as e:
             logger.error(f"Error generating analysis: {e}")
             return ""
 
     def analyze_topic_relationships(self, content: str) -> Dict:
-        """Analyze mathematical topic relationships in content"""
         prompt = f"""Analyze the mathematical relationships between topics in this lecture.
 Focus on:
 1. Core concepts and their dependencies
@@ -91,11 +77,10 @@ Core Topics: [list key topics]
 Dependencies: [list topic dependencies]
 Theoretical Links: [list theoretical connections]
 """
-        analysis = self._generate_phi4_analysis(prompt)
+        analysis = self._generate_analysis(prompt)
         return self._parse_topic_analysis(analysis)
 
     def generate_concept_map(self, content: str) -> Dict:
-        """Generate a mathematical concept map"""
         prompt = f"""Create a concept map for this mathematical content.
 Identify:
 1. Key concepts
@@ -112,11 +97,10 @@ Relationships: [list relationships]
 Prerequisites: [list prerequisites]
 Applications: [list applications]
 """
-        map_data = self._generate_phi4_analysis(prompt)
+        map_data = self._generate_analysis(prompt)
         return self._parse_concept_map(map_data)
 
     def identify_learning_objectives(self, content: str) -> Dict:
-        """Identify learning objectives from content"""
         prompt = f"""Analyze this mathematics lecture and identify:
 1. Main learning objectives
 2. Key theoretical understandings
@@ -128,15 +112,13 @@ Content:
 
 Format as bullet points under each category.
 """
-        objectives = self._generate_phi4_analysis(prompt)
+        objectives = self._generate_analysis(prompt)
         return self._parse_learning_objectives(objectives)
 
     def analyze_complexity(self) -> List[Dict]:
-        """Calculate complexity metrics for content"""
-        # For single file analysis
         if not self.lectures:
             return [{
-                'total_score': 5.0,  # Default mid-range score
+                'total_score': 5.0,
                 'metrics': {
                     'term_density': 5.0,
                     'concept_density': 5.0,
@@ -163,7 +145,6 @@ Format as bullet points under each category.
         return complexity_scores
 
     def _parse_topic_analysis(self, analysis: str) -> Dict:
-        """Parse topic analysis output"""
         sections = {
             'core_topics': [],
             'dependencies': [],
@@ -185,7 +166,6 @@ Format as bullet points under each category.
         return sections
 
     def _parse_concept_map(self, map_data: str) -> Dict:
-        """Parse concept map output"""
         sections = {
             'concepts': [],
             'relationships': [],
@@ -210,7 +190,6 @@ Format as bullet points under each category.
         return sections
 
     def _parse_learning_objectives(self, objectives: str) -> Dict:
-        """Parse learning objectives output"""
         sections = {
             'main_objectives': [],
             'theoretical_understanding': [],

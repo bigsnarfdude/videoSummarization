@@ -51,61 +51,126 @@
             </select>
         </div>
 
-        <!-- Generated Files Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Audio -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium">Audio</h3>
-                    <button id="downloadAudio" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
-                        Download
+        <!-- Tabs -->
+        <div class="mb-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button 
+                        class="tab-button active border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm" 
+                        data-tab="file-downloads">
+                        File Downloads
                     </button>
-                </div>
-                <audio id="audioPlayer" controls class="w-full" disabled>
-                    Your browser does not support the audio element.
-                </audio>
-            </div>
-
-            <!-- Transcript -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium">Transcript</h3>
-                    <button id="downloadTranscript" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
-                        Download
+                    <button 
+                        class="tab-button border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm"
+                        data-tab="lecture-analytics">
+                        Lecture Analytics
                     </button>
-                </div>
-                <div id="transcriptPreview" class="h-40 overflow-y-auto text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                    Select a video to preview transcript...
-                </div>
+                </nav>
             </div>
+        </div>
 
-            <!-- Summary -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium">Summary</h3>
-                    <button id="downloadSummary" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
-                        Download
-                    </button>
-                </div>
-                <div id="summaryPreview" class="h-40 overflow-y-auto text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                    Select a video to preview summary...
-                </div>
-            </div>
-
-            <!-- Generate Report -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium mb-4">Generate Report</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Format</label>
-                        <select id="reportFormat" class="w-full rounded-md border border-gray-300 shadow-sm p-2">
-                            <option value="markdown">Markdown</option>
-                            <option value="logseq">Logseq</option>
-                        </select>
+        <!-- File Downloads Tab -->
+        <div id="file-downloads" class="tab-content active">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Audio -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium">Audio</h3>
+                        <button id="downloadAudio" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
+                            Download
+                        </button>
                     </div>
-                    <button id="generateReport" class="w-full bg-blue-600 text-white rounded-md py-2 px-4 hover:bg-blue-700 disabled:bg-blue-400">
-                        Generate Report
-                    </button>
+                    <audio id="audioPlayer" controls class="w-full" disabled>
+                        Your browser does not support the audio element.
+                    </audio>
+                </div>
+
+                <!-- Transcript -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium">Transcript</h3>
+                        <button id="downloadTranscript" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
+                            Download
+                        </button>
+                    </div>
+                    <div id="transcriptPreview" class="h-40 overflow-y-auto text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                        Select a video to preview transcript...
+                    </div>
+                </div>
+
+                <!-- Summary -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium">Summary</h3>
+                        <button id="downloadSummary" class="text-blue-600 hover:text-blue-800 disabled:text-gray-400">
+                            Download
+                        </button>
+                    </div>
+                    <div id="summaryPreview" class="h-40 overflow-y-auto text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                        Select a video to preview summary...
+                    </div>
+                </div>
+
+                <!-- Generate Report -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium mb-4">Generate Report</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                            <select id="reportFormat" class="w-full rounded-md border border-gray-300 shadow-sm p-2">
+                                <option value="markdown">Markdown</option>
+                                <option value="logseq">Logseq</option>
+                            </select>
+                        </div>
+                        <button id="generateReport" class="w-full bg-blue-600 text-white rounded-md py-2 px-4 hover:bg-blue-700 disabled:bg-blue-400">
+                            Generate Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lecture Analytics Tab -->
+        <div id="lecture-analytics" class="tab-content hidden">
+            <!-- Word Statistics -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Total Word Count</h3>
+                    <div id="totalWordCount" class="text-2xl font-bold">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Processing Time</h3>
+                    <div id="processingTime" class="text-2xl font-bold">-</div>
+                    <p class="text-xs text-gray-500">milliseconds</p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-sm font-medium mb-2">Chunks Processed</h3>
+                    <div id="chunkCount" class="text-2xl font-bold">-</div>
+                </div>
+            </div>
+
+            <!-- Concepts and Topics -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-lg font-semibold mb-4">Key Concepts</h3>
+                    <div id="conceptList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Concepts will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-4">
+                    <h3 class="text-lg font-semibold mb-4">Core Topics</h3>
+                    <div id="topicList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Topics will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Complexity Analysis -->
+            <div class="bg-white rounded-lg shadow p-4 mt-6">
+                <h3 class="text-lg font-semibold mb-4">Complexity Analysis</h3>
+                <div id="complexityChart" class="grid grid-cols-3 gap-4">
+                    <!-- Complexity metrics will be dynamically inserted here -->
                 </div>
             </div>
         </div>
@@ -120,12 +185,90 @@
             transcript: document.getElementById('downloadTranscript'),
             summary: document.getElementById('downloadSummary')
         };
-        
+
+        // Tab Switching
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabId = button.dataset.tab;
+                
+                tabButtons.forEach(btn => {
+                    btn.classList.remove('border-blue-500', 'text-blue-600');
+                    btn.classList.add('border-transparent', 'text-gray-500');
+                });
+                button.classList.add('border-blue-500', 'text-blue-600');
+                
+                tabContents.forEach(content => {
+                    content.classList.add('hidden');
+                });
+                document.getElementById(tabId).classList.remove('hidden');
+            });
+        });
+
+        // Populate Report Data Function
+        function populateReportData(statsData) {
+            // Word Statistics
+            document.getElementById('totalWordCount').textContent = 
+                statsData.analysis.word_count.toLocaleString();
+            
+            document.getElementById('processingTime').textContent = 
+                statsData.metadata.processing_time || '-';
+            
+            document.getElementById('chunkCount').textContent = 
+                statsData.analysis.chunk_count || '-';
+
+            // Concepts
+            const conceptList = document.getElementById('conceptList');
+            conceptList.innerHTML = '';
+            statsData.analysis.concepts.key_concepts.forEach(concept => {
+                const conceptElement = document.createElement('div');
+                conceptElement.className = 'bg-blue-50 rounded-lg p-3';
+                conceptElement.innerHTML = `
+                    <div class="font-medium text-blue-900">${concept.split('**')[1] || concept}</div>
+                    <div class="text-sm text-blue-600">Key Concept</div>
+                `;
+                conceptList.appendChild(conceptElement);
+            });
+
+            // Topics
+            const topicList = document.getElementById('topicList');
+            topicList.innerHTML = '';
+            statsData.analysis.topics.core_topics.forEach(topic => {
+                const topicElement = document.createElement('div');
+                topicElement.className = 'bg-green-50 rounded-lg p-3';
+                topicElement.innerHTML = `
+                    <div class="font-medium text-green-900">${topic}</div>
+                    <div class="text-sm text-green-600">Core Topic</div>
+                `;
+                topicList.appendChild(topicElement);
+            });
+
+            // Complexity Analysis
+            const complexityChart = document.getElementById('complexityChart');
+            const metrics = statsData.analysis.complexity.metrics;
+            complexityChart.innerHTML = `
+                <div class="bg-blue-50 p-3 rounded">
+                    <div class="text-sm font-medium">Term Density</div>
+                    <div class="text-lg">${metrics.term_density.toFixed(2)}</div>
+                </div>
+                <div class="bg-green-50 p-3 rounded">
+                    <div class="text-sm font-medium">Concept Density</div>
+                    <div class="text-lg">${metrics.concept_density.toFixed(2)}</div>
+                </div>
+                <div class="bg-purple-50 p-3 rounded">
+                    <div class="text-sm font-medium">Abstraction Level</div>
+                    <div class="text-lg">${metrics.abstraction_level.toFixed(2)}</div>
+                </div>
+            `;
+        }
+
         // Fetch available videos
         fetch('/list-transcripts')
             .then(response => response.json())
             .then(data => {
-                data.files.forEach(file => {
+                data.files?.forEach(file => {
                     const option = document.createElement('option');
                     option.value = file.replace('.txt', '');
                     option.textContent = file.replace('.txt', '');
@@ -158,6 +301,16 @@
                 .then(text => {
                     document.getElementById('summaryPreview').textContent = text.slice(0, 500) + '...';
                 });
+
+            // Fetch and populate lecture analytics
+            fetch(`/api/v1/lectures/${selectedVideo}`)
+                .then(response => response.json())
+                .then(data => {
+                    populateReportData(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching video stats:', error);
+                });
         });
 
         // Handle downloads
@@ -170,18 +323,4 @@
         });
 
         downloadBtns.summary.addEventListener('click', () => {
-            window.location.href = `/api/v1/downloads/summaries/${videoSelect.value}_summary.txt`;
-        });
-
-        // Handle report generation
-        document.getElementById('generateReport').addEventListener('click', () => {
-            const format = document.getElementById('reportFormat').value;
-            const selectedVideo = videoSelect.value;
-            if (!selectedVideo) return;
-
-            window.location.href = `/api/v1/downloads/logseq/${selectedVideo}.md`;
-        });
-    });
-    </script>
-</body>
-</html>
+            window.location

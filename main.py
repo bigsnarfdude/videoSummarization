@@ -8,25 +8,19 @@ from transcribe.transcribe import transcribe
 from transcribe.get_video import convert_to_wav, process_local_video
 from transcribe.utils import get_filename
 
-# Constants
 LOG_FILE = "transcribe.log"
 SUMMARIES_DIR = "files/summaries"
 LOGSEQ_DIR = "files/logseq"
 
-# Configure logging to both file and console
 def setup_logging():
-    # Create a formatter
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     
-    # Set up file handler
     file_handler = logging.FileHandler(LOG_FILE)
     file_handler.setFormatter(formatter)
     
-    # Set up console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
     
-    # Configure root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
     root_logger.addHandler(file_handler)
@@ -134,7 +128,6 @@ def process_local(input_path, title):
         raise
 
 if __name__ == "__main__":
-    # Set up logging before anything else
     setup_logging()
     
     parser = argparse.ArgumentParser(description="Process local video files.")

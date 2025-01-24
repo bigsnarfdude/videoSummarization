@@ -7,15 +7,17 @@ const VideoProcessor = () => {
 
     const allowedTypes = [
         'video/mp4', 'video/avi', 'video/quicktime', 
-        'video/x-matroska', 'audio/mpeg', 'audio/mp3'
+        'video/x-matroska', 'audio/mpeg'
     ];
+
     const handleFileSelect = (event) => {
         const file = event.target.files[0];
-        if (file && allowedTypes.includes(file.type)) {
+        const fileExtension = file?.name?.split('.').pop()?.toLowerCase();
+        if (file && (allowedTypes.includes(file.type) || fileExtension === 'mp3')) {
             setSelectedFile(file);
             setError(null);
         } else {
-            setError('Please select a valid video file (MP4, AVI, MOV, or MKV)');
+            setError('Please select a valid video or audio file (MP4, AVI, MOV, MKV, or MP3)');
             setSelectedFile(null);
         }
     };
@@ -27,11 +29,12 @@ const VideoProcessor = () => {
     const handleDrop = (event) => {
         event.preventDefault();
         const file = event.dataTransfer.files[0];
-        if (file && allowedTypes.includes(file.type)) {
+        const fileExtension = file?.name?.split('.').pop()?.toLowerCase();
+        if (file && (allowedTypes.includes(file.type) || fileExtension === 'mp3')) {
             setSelectedFile(file);
             setError(null);
         } else {
-            setError('Please select a valid video file (MP4, AVI, MOV, or MKV)');
+            setError('Please select a valid video or audio file (MP4, AVI, MOV, MKV, or MP3)');
         }
     };
 
@@ -44,6 +47,7 @@ const VideoProcessor = () => {
         const formData = new FormData();
         formData.append('file', selectedFile);
         formData.append('title', selectedFile.name.split('.')[0]);
+        formData.append('type', selectedFile.type.split('/')[0]); // 'video' or 'audio'
 
         try {
             const response = await fetch('/api/v1/process', {
@@ -59,7 +63,7 @@ const VideoProcessor = () => {
             }
 
             if (!response.ok) {
-                const errorMessage = data.error || data.message || 'Failed to process video';
+                const errorMessage = data.error || data.message || 'Failed to process file';
                 throw new Error(errorMessage);
             }
 
@@ -78,9 +82,9 @@ const VideoProcessor = () => {
     return React.createElement('div', { className: 'w-full max-w-3xl mx-auto p-4 space-y-4' },
         // Upload Card
         React.createElement('div', { className: 'bg-white rounded-lg shadow p-6' },
-            React.createElement('h2', { className: 'text-xl font-bold mb-2' }, 'Video Processing'),
+            React.createElement('h2', { className: 'text-xl font-bold mb-2' }, 'Video or Audio Processing'),
             React.createElement('p', { className: 'text-gray-600 mb-4' }, 
-                'Upload a video to generate transcription, summary, and notes'
+                'Upload a video or audio file to generate transcription, summary, and notes'
             ),
             
             // Upload Area
@@ -94,7 +98,7 @@ const VideoProcessor = () => {
                     type: 'file',
                     ref: fileInputRef,
                     onChange: handleFileSelect,
-                    accept: '.mp4,.avi,.mov,.mkv',
+                    accept: '.mp4,.avi,.mov,.mkv,.mp3',
                     className: 'hidden'
                 }),
                 React.createElement('div', { className: 'mb-4' },
@@ -113,10 +117,10 @@ const VideoProcessor = () => {
                     )
                 ),
                 React.createElement('p', { className: 'text-sm text-gray-600' },
-                    'Drag and drop a video file here, or click to select'
+                    'Drag and drop a video or audio file here, or click to select'
                 ),
                 React.createElement('p', { className: 'text-xs text-gray-500 mt-1' },
-                    'Supports MP4, AVI, MOV, and MKV'
+                    'Supports MP4, AVI, MOV, MKV, and MP3'
                 )
             ),
 
@@ -146,7 +150,7 @@ const VideoProcessor = () => {
                     onClick: handleUpload,
                     disabled: isUploading,
                     className: 'mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed'
-                }, isUploading ? 'Processing...' : 'Process Video')
+                }, isUploading ? 'Processing...' : 'Process File')
             )
         ),
 

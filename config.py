@@ -63,7 +63,7 @@ class Settings(BaseSettings):
 
     OLLAMA_CONFIG: OllamaConfig = {
         "base_url": "http://localhost:11434",
-        "model": "phi",  # or your preferred model
+        "model": "phi4:latest",
         "timeout": 120,
         "max_tokens": 1024
     }

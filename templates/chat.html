@@ -106,6 +106,118 @@
         </div>
     </main>
 
-    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const elements = {
+                transcriptSelect: document.getElementById('transcriptSelect'),
+                loadBtn: document.getElementById('loadBtn'),
+                historyArea: document.getElementById('historyArea'),
+                contextArea: document.getElementById('contextArea'),
+                messagesArea: document.getElementById('messagesArea'),
+                errorArea: document.getElementById('errorArea'),
+                errorText: document.getElementById('errorText'),
+                queryInput: document.getElementById('queryInput'),
+                sendBtn: document.getElementById('sendBtn')
+            };
+
+            let messages = [];
+
+            // Fetch available transcripts
+            fetch('/list-transcripts')
+                .then(response => response.json())
+                .then(data => {
+                    data.files?.forEach(file => {
+                        const option = document.createElement('option');
+                        option.value = file;
+                        option.textContent = file;
+                        elements.transcriptSelect.appendChild(option);
+                    });
+                })
+                .catch(error => showError('Failed to load transcripts'));
+
+            async function loadTranscript() {
+                const selectedFile = elements.transcriptSelect.value;
+                if (!selectedFile) return;
+
+                try {
+                    const response = await fetch(`/transcripts/${selectedFile}`);
+                    const text = await response.text();
+                    elements.contextArea.value = text;
+                    hideError();
+                } catch (error) {
+                    showError('Failed to load transcript');
+                }
+            }
+
+            async function sendQuery() {
+                const query = elements.queryInput.value.trim();
+                if (!query) return;
+
+                const selectedFile = elements.transcriptSelect.value;
+                const timestamp = new Date().toISOString();
+
+                elements.sendBtn.disabled = true;
+                document.getElementById('loadingSpinner').classList.remove('hidden');
+                hideError();
+
+                try {
+                    const response = await fetch('/ollama/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            query,
+                            history: messages,
+                            context: elements.contextArea.value
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Failed to get response');
+                    }
+
+                    messages.push(`[${timestamp}] User: ${query}`, `[${timestamp}] Assistant: ${data.response}`);
+                    updateMessages();
+                    elements.queryInput.value = '';
+                } catch (error) {
+                    showError(error.message);
+                } finally {
+                    elements.sendBtn.disabled = false;
+                    document.getElementById('loadingSpinner').classList.add('hidden');
+                }
+            }
+
+            function updateMessages() {
+                elements.messagesArea.innerHTML = messages.map((message, i) => `
+                    <div class="p-4 rounded-lg max-w-3xl ${i % 2 === 0 ? 'bg-blue-50 ml-auto' : 'bg-white'}">
+                        ${message}
+                    </div>
+                `).join('');
+                elements.messagesArea.scrollTop = elements.messagesArea.scrollHeight;
+                elements.historyArea.value = messages.join('\n\n');
+                elements.historyArea.scrollTop = elements.historyArea.scrollHeight;
+            }
+
+            function showError(message) {
+                elements.errorText.textContent = message;
+                elements.errorArea.classList.remove('hidden');
+            }
+
+            function hideError() {
+                elements.errorArea.classList.add('hidden');
+            }
+
+            // Event Listeners
+            elements.loadBtn.addEventListener('click', loadTranscript);
+            elements.sendBtn.addEventListener('click', sendQuery);
+            elements.queryInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendQuery();
+                }
+            });
+        });
+    </script>
 </body>
 </html>

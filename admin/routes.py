@@ -1,9 +1,25 @@
 from flask import Blueprint, jsonify, request
 from pathlib import Path
 from .lecture_stats import LectureStatsTracker
+from flask import render_template, jsonify
+from . import admin_bp
 
 api_bp = Blueprint('api', __name__, url_prefix='/api/v1/lectures')
 stats_tracker = LectureStatsTracker()
+
+
+@admin_bp.route('/')
+def admin_dashboard():
+    return render_template('admin/dashboard.html')
+
+@admin_bp.route('/stats')
+def get_stats():
+    try:
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 
 @api_bp.route('/', methods=['GET'])
 def get_all_lectures():

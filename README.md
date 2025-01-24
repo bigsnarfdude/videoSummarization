@@ -1,67 +1,35 @@
-# VideoLLM: An AI-powered app built around your video lectures, designed to help you extract insights.
+# VideoLLM
 
-VideoLLM is an AI-driven tool that helps users analyze video lectures by creating new documents, taking notes, and generating content. It’s designed to assist learners in synthesizing information from various sources and making faster, more meaningful connections.
+VideoLLM is an AI-powered application for processing and analyzing video lectures. It transcribes videos, generates summaries, and creates structured notes for improved learning efficiency.
 
-![Chat interface image](images/chat.png)
+## Features
 
-## Key Features
-
-- 🎥 Video Processing
-  - Supports MP4, AVI, MOV, and MKV formats
-  - Automatic audio extraction
-  - High-accuracy transcription using Whisper.cpp
-
-- 📊 Content Analysis
-  - Text summarization using MLX Phi-4 model
-  - Topic and concept extraction
-  - Mathematical content analysis
-  - Complexity scoring
-  - Auto-generated Logseq notes
-
-- 📈 Admin Dashboard
-  - Real-time processing statistics
-  - Word count analytics
-  - Topic and concept visualization
-  - Content trend analysis
-
-- 🎥 Chat with VideoLLM
-  - Real-time chat with the created documents
-  - Learn more about your document
-  - Use natural language 
-  - Interogate the lecture
+- Video transcription using Faster-Whisper
+- AI-powered summarization with Ollama Microsoft phi4:latest
+- Automated Logseq note generation
+- Interactive LLM chat interface for content exploration using Ollama Microsoft phi4:latest
+- Analytics dashboard for content insights
 
 ## Prerequisites
 
 - Python 3.9+
 - FFmpeg
-- Whisper.cpp
-- MLX
 - Ollama
 
 ## Installation
 
-1. Clone the repository:
+1. Clone and setup environment:
 ```bash
-git clone https://github.com/yourusername/videoSummarization.git
-cd videoSummarization
-```
-
-2. Create and activate virtual environment:
-```bash
+git clone <repository-url>
+cd videoLLM
 python -m venv venv
 source venv/bin/activate  # Unix/macOS
-# OR
+# or
 venv\Scripts\activate     # Windows
-```
-
-3. Install Python dependencies:
-```bash
 pip install -r requirements.txt
 ```
 
-4. Install external dependencies:
-
-FFmpeg:
+2. Install FFmpeg:
 ```bash
 # macOS
 brew install ffmpeg
@@ -69,190 +37,74 @@ brew install ffmpeg
 # Ubuntu
 sudo apt-get install ffmpeg
 
-# Windows
-# Download from ffmpeg.org
+# Windows: Download from ffmpeg.org
 ```
 
-Whisper.cpp:
+3. Install Ollama and model:
 ```bash
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-make
-# Download model: large-v3
-bash ./models/download-ggml-model.sh large-v3
+# Install Ollama from ollama.ai
+ollama pull phi4
 ```
 
-5. Configure environment:
+4. Configure environment:
 ```bash
 cp .env.example .env
+# Edit .env with your settings
 ```
 
-Edit .env to set:
-```env
-SECRET_KEY=your-secret-key
-WHISPER_PATH=/path/to/whisper/executable
-WHISPER_MODEL_PATH=/path/to/whisper/model
-MLX_MODEL_NAME=mlx-community/phi-4-8bit
-```
-
-6. Create required directories:
+5. Create required directories:
 ```bash
 mkdir -p files/{uploads,audio,transcripts,summaries,logseq,stats} logs
 ```
 
-## Project Structure
-
-```
-videoSummarization/
-├── admin/                 # Admin dashboard
-│   ├── api_routes.py      # API endpoints
-│   ├── lecture_stats.py   # Statistics tracking
-│   └── math_analytics.py  # Content analysis
-│   └── routes.py          # Routes
-├── transcribe/            # Core processing
-│   ├── get_video.py       # Video handling
-│   ├── processor.py       # Main processing
-│   ├── summarize_model.py # MLX integration
-│   ├── transcribe.py      # Whisper integration
-│   └── utils.py           # Utilities
-├── templates/             # Frontend templates
-│   └── admin
-│       └── dashboard.html # Analytics template
-│   ├── base.html          # Base template
-│   ├── chat.html          # LLM Chat template
-│   └── index.html         # Upload template
-├── static/                # Static assets
-├── app.py                 # Flask application
-├── config.py              # Configuration
-└── main.py                # CLI Video Processing
-└── requirements.txt   # Dependencies
-```
-
 ## Usage
 
-### Starting the Server
-
-Development mode:
+Start the server:
 ```bash
 python app.py
 ```
 
-Production mode:
-```bash
-export APP_ENV=production
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
-```
+Access interfaces:
+- Main interface: http://localhost:5000
+- Admin dashboard: http://localhost:5000/admin
+- Chat interface: http://localhost:5000/chat
 
-### Web Interface
+## API Endpoints
 
-1. Access `http://localhost:5000`
-2. Upload video through drag-and-drop or file selection
-3. Wait for processing completion
-4. Access generated files and insights
+### Process Video
+- `POST /api/v1/process`
+  - Upload and process video file
+  - Returns paths to generated files (audio, transcript, summary, etc.)
 
-### Admin Dashboard
+### Admin Analytics
+- `GET /admin/api/stats`
+  - Get overall processing statistics
+- `GET /admin/api/lecture/<lecture_name>`
+  - Get stats for specific lecture
 
-1. Access `http://localhost:5000/admin`
-2. View statistics and analytics:
-   - Word count distribution
-   - Topic categorization
-   - Content trends
-   - Processing metrics
+### Chat Interface
+- `POST /ollama/chat`
+  - Send queries to chat with processed content
+- `GET /ollama/status`
+  - Check Ollama service status
 
-### API Endpoints
+### File Management
+- `GET /list-transcripts`
+  - List all available transcripts
+- `GET /transcripts/<filename>`
+  - Get specific transcript content
 
-Process video:
-```bash
-curl -X POST \
-  -F "file=@/path/to/video.mp4" \
-  -F "title=Video Title" \
-  http://localhost:5000/api/v1/process
-```
+## Documentation
 
-Check status:
-```bash
-curl http://localhost:5000/api/v1/status
-```
-
-## Output Files
-
-The platform generates several files for each processed video:
-
-- `files/audio/*.wav`: Extracted audio (16kHz, mono)
-- `files/transcripts/*.txt`: Raw transcriptions
-- `files/summaries/*.txt`: Generated summaries
-- `files/logseq/*.md`: Logseq-compatible notes
-- `files/stats/*.json`: Processing statistics and analysis
-
-## Development
-
-### Running Tests
-```bash
-pytest
-```
-
-### Code Style
-```bash
-flake8 .
-black .
-```
-
-### Adding New Features
-
-1. Create feature branch
-2. Add tests
-3. Implement feature
-4. Update documentation
-5. Submit pull request
-
-## Troubleshooting
-
-### Common Issues
-
-1. **File Upload Errors**
-   - Check file size limits in config.py
-   - Verify allowed file types
-   - Ensure upload directory permissions
-
-2. **Processing Errors**
-   - Verify Whisper.cpp installation
-   - Check model paths
-   - Monitor logs/app.log
-
-3. **Permission Issues**
-   ```bash
-   chmod -R 755 files/
-   chmod -R 755 logs/
-   ```
-
-4. **MLX Model Issues**
-   - Verify model availability
-   - Check internet connection
-   - Monitor system resources
-
-5. **Ollama Model Issues**
-   - Verify model availability
-   - Check internet connection
-   - Monitor system resources
+See source code docstrings for detailed API documentation.
 
 ## Contributing
 
-1. Fork the repository
+1. Fork repository
 2. Create feature branch
 3. Commit changes
-4. Run tests
-5. Submit pull request
+4. Submit pull request
 
 ## License
 
 MIT
-
-## Acknowledgments
-
-- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for transcription
-- [MLX](https://github.com/ml-explore/mlx) for analysis
-- [Flask](https://flask.palletsprojects.com/) framework
-- [Tailwind CSS](https://tailwindcss.com/) for styling
-- [Ollama](https://ollama.com/download) for chat
-- [FFMpeg](https://www.ffmpeg.org/) for video -> audio processing
-

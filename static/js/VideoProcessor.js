@@ -5,8 +5,10 @@ const VideoProcessor = () => {
     const [results, setResults] = React.useState(null);
     const fileInputRef = React.useRef(null);
 
-    const allowedTypes = ['video/mp4', 'video/avi', 'video/quicktime', 'video/x-matroska'];
-
+    const allowedTypes = [
+        'video/mp4', 'video/avi', 'video/quicktime', 
+        'video/x-matroska', 'audio/mpeg', 'audio/mp3'
+    ];
     const handleFileSelect = (event) => {
         const file = event.target.files[0];
         if (file && allowedTypes.includes(file.type)) {

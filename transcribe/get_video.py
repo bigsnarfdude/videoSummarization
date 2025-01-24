@@ -54,27 +54,23 @@ def process_video_list(list_file_path: str, output_path: Optional[str] = None) -
         raise
 
 def process_local_video(video_path: str, output_path: Optional[str] = None) -> str:
-    """
-    Processes a local video file and saves the converted audio.
-    
-    Args:
-        video_path: Path to the video file
-        output_path: Optional custom output path
-        
-    Returns:
-        str: Path to the processed WAV file
-    """
+    """Process video or audio file"""
     if output_path is None:
         output_path = settings.OUTPUT_DIRS["audio"]
-        
+    
     if not Path(output_path).exists():
         Path(output_path).mkdir(parents=True, exist_ok=True)
     
     if not Path(video_path).exists():
-        raise FileNotFoundError(f"Video file not found: {video_path}")
+        raise FileNotFoundError(f"File not found: {video_path}")
 
     original_file_base = Path(video_path).stem
     slugified_base = slugify(original_file_base)
+    
+    # If it's already a WAV, just return the path
+    if Path(video_path).suffix.lower() == '.wav':
+        return str(video_path)
+    
     new_file_path = Path(output_path) / f"{slugified_base}.wav"
     
     convert_to_wav(str(video_path), str(new_file_path))
@@ -122,6 +118,12 @@ def is_video_file(filepath: str) -> bool:
     """
     video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v'}
     return Path(filepath).suffix.lower() in video_extensions
+
+def is_audio_file(filepath: str) -> bool:
+    """Check if file is video or audio"""
+    audio_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.m4v', '.mp3', '.wav'}
+    return Path(filepath).suffix.lower() in audio_extensions
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

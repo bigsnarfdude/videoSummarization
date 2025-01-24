@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     
     TRANSCRIPTION_CONFIG: TranscriptionConfig = {
         "model_size": "large-v3",
-        "device": "gpu", 
+        "device": "cuda", 
         "compute_type": "float16",
         "beam_size": 5,
         "language": "en"

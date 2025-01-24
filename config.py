@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     WORKERS: int = 4
     
     MAX_FILE_SIZE: int = 500 * 1024 * 1024  # 500MB
-    ALLOWED_EXTENSIONS: List[str] = ["mp4", "avi", "mov", "mkv"]
+    ALLOWED_EXTENSIONS: List[str] = ["mp4", "avi", "mov", "mkv", "mp3"]
     MAX_FILENAME_LENGTH: int = 100
     
     WINDOW_SIZE: int = 4096
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     
     TRANSCRIPTION_CONFIG: TranscriptionConfig = {
         "model_size": "large-v3",
-        "device": "cuda",
+        "device": "gpu", 
         "compute_type": "float16",
         "beam_size": 5,
         "language": "en"

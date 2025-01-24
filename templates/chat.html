@@ -3,15 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VideoLLM Chat</title>
+    <title>VideoLLM - Chat Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="h-screen flex flex-col bg-gray-50">
-    <header class="py-4 px-6 bg-white border-b">
-        <h1 class="text-2xl font-bold text-gray-900">VideoLLM Chat</h1>
-    </header>
+    <!-- Navigation -->
+    <nav class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="/" class="text-xl font-bold text-gray-800">VideoLLM</a>
+                    </div>
+                    <div class="ml-6 flex space-x-8">
+                        <a href="/" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Upload
+                        </a>
+                        <a href="/chat" class="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Chat
+                        </a>
+                        <a href="/admin" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Stats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
     
-    <main class="flex-1 overflow-hidden flex">
+    <!-- Welcome Banner -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto py-6 px-4">
+            <h1 class="text-2xl font-bold mb-2">Chat with Your Videos</h1>
+            <p class="text-gray-600">Select a processed video transcript and start exploring its content through interactive chat.</p>
+        </div>
+    </div>
+
+    <main class="flex-1 overflow-hidden flex max-w-7xl mx-auto w-full">
         <!-- Left Sidebar -->
         <div class="w-72 bg-white border-r p-4 flex flex-col">
             <div class="space-y-4">
@@ -48,7 +76,7 @@
         </div>
 
         <!-- Main Chat Area -->
-        <div class="flex-1 flex flex-col max-w-4xl mx-auto w-full p-4">
+        <div class="flex-1 flex flex-col p-4">
             <div id="messagesArea" class="flex-1 overflow-y-auto mb-4 space-y-4"></div>
 
             <div id="errorArea" class="mb-4 p-4 bg-red-50 border-l-4 border-red-400 flex items-center hidden">
@@ -75,129 +103,6 @@
         </div>
     </main>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const elements = {
-                transcriptSelect: document.getElementById('transcriptSelect'),
-                loadBtn: document.getElementById('loadBtn'),
-                historyArea: document.getElementById('historyArea'),
-                contextArea: document.getElementById('contextArea'),
-                messagesArea: document.getElementById('messagesArea'),
-                errorArea: document.getElementById('errorArea'),
-                errorText: document.getElementById('errorText'),
-                queryInput: document.getElementById('queryInput'),
-                sendBtn: document.getElementById('sendBtn')
-            };
-
-            let messages = [];
-
-            async function fetchTranscripts() {
-                try {
-                    const response = await fetch('/list-transcripts');
-                    const data = await response.json();
-                    data.files?.forEach(file => {
-                        const option = document.createElement('option');
-                        option.value = file;
-                        option.textContent = file;
-                        elements.transcriptSelect.appendChild(option);
-                    });
-                } catch (error) {
-                    showError('Failed to load transcripts');
-                }
-            }
-
-            async function loadTranscript() {
-                const selectedFile = elements.transcriptSelect.value;
-                if (!selectedFile) return;
-
-                try {
-                    const response = await fetch(`/transcripts/${selectedFile}`);
-                    const text = await response.text();
-                    elements.contextArea.value = text;
-                    hideError();
-                } catch (error) {
-                    showError('Failed to load transcript');
-                }
-            }
-
-            async function sendQuery() {
-                const query = elements.queryInput.value.trim();
-                if (!query) return;
-
-                const selectedFile = elements.transcriptSelect.value;
-                const chatLogName = selectedFile ? `chat_history_${selectedFile.split('.')[0]}.log` : 'chat_history.log';
-                const timestamp = new Date().toISOString();
-
-                const spinner = document.getElementById('loadingSpinner');
-                elements.sendBtn.disabled = true;
-                spinner.classList.remove('hidden');
-                hideError();
-
-                try {
-                    const response = await fetch('/ollama/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            query,
-                            history: messages,
-                            context: elements.contextArea.value,
-                            log_file: chatLogName
-                        })
-                    });
-
-                    const data = await response.json();
-                    
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Failed to get response');
-                    }
-
-                    messages.push(`[${timestamp}] User: ${query}`, `[${timestamp}] Assistant: ${data.response}`);
-                    updateMessages();
-                    elements.queryInput.value = '';
-                } catch (error) {
-                    showError(error.message);
-                } finally {
-                    elements.sendBtn.disabled = false;
-                    document.getElementById('loadingSpinner').classList.add('hidden');
-                }
-            }
-
-            function updateMessages() {
-                elements.messagesArea.innerHTML = messages.map((message, i) => `
-                    <div class="p-4 rounded-lg max-w-3xl ${i % 2 === 0 ? 'bg-blue-50 ml-auto' : 'bg-white'}">
-                        ${message}
-                    </div>
-                `).join('');
-                elements.messagesArea.scrollTop = elements.messagesArea.scrollHeight;
-                
-                // Update history area
-                const historyArea = document.getElementById('historyArea');
-                historyArea.value = messages.join('\n\n');
-                historyArea.scrollTop = historyArea.scrollHeight;
-            }
-
-            function showError(message) {
-                elements.errorText.textContent = message;
-                elements.errorArea.classList.remove('hidden');
-            }
-
-            function hideError() {
-                elements.errorArea.classList.add('hidden');
-            }
-
-            // Event Listeners
-            elements.loadBtn.addEventListener('click', loadTranscript);
-            elements.sendBtn.addEventListener('click', sendQuery);
-            elements.queryInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendQuery();
-                }
-            });
-
-            // Initialize
-            fetchTranscripts();
-        });
-    </script>
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
 </html>

@@ -3,25 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Processing App</title>
-    
-    <!-- Tailwind CSS CDN -->
+    <title>VideoLLM - Video Processing</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React and ReactDOM -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel for JSX -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 </head>
-<body>
-    <div id="root"></div>
-    
-    <!-- Your React component -->
-    <script type="text/babel" src="{{ url_for('static', filename='js/VideoProcessor.js') }}"></script>
-    
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="/" class="text-xl font-bold text-gray-800">VideoLLM</a>
+                    </div>
+                    <div class="ml-6 flex space-x-8">
+                        <a href="/" class="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Upload
+                        </a>
+                        <a href="/chat" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Chat
+                        </a>
+                        <a href="/admin" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Stats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Welcome Banner -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto py-12 px-4">
+            <h1 class="text-3xl font-bold text-center mb-4">Welcome to VideoLLM</h1>
+            <p class="text-gray-600 text-center max-w-3xl mx-auto">
+                An AI-powered application for processing and analyzing video lectures, generating transcripts, summaries, and structured notes for improved learning efficiency.
+            </p>
+            <div class="mt-8 max-w-2xl mx-auto">
+                <h2 class="text-lg font-semibold mb-4">How it works:</h2>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-4">
+                        <span class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">1</span>
+                        <p>Upload your video lecture below</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">2</span>
+                        <p>Use the <a href="/chat" class="text-blue-600 hover:underline">Chat</a> interface to explore and learn from your content</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-semibold">3</span>
+                        <p>Review analytics and insights in the <a href="/admin" class="text-blue-600 hover:underline">Stats</a> dashboard</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Component -->
+    <div id="root" class="max-w-7xl mx-auto py-12 px-4"></div>
+
     <!-- Initialize React -->
+    <script type="text/babel" src="{{ url_for('static', filename='js/VideoProcessor.js') }}"></script>
     <script type="text/babel">
         ReactDOM.render(
             <VideoProcessor />,

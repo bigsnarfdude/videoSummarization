@@ -2,14 +2,45 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Document Analysis Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoLLM - Analytics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gray-100">
-    <div class="p-6 max-w-6xl mx-auto">
-        <h1 class="text-2xl font-bold mb-6">Document Analysis Dashboard</h1>
-        
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <a href="/" class="text-xl font-bold text-gray-800">VideoLLM</a>
+                    </div>
+                    <div class="ml-6 flex space-x-8">
+                        <a href="/" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Upload
+                        </a>
+                        <a href="/chat" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Chat
+                        </a>
+                        <a href="/admin" class="border-blue-500 text-gray-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Stats
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Welcome Banner -->
+    <div class="bg-white shadow">
+        <div class="max-w-7xl mx-auto py-6 px-4">
+            <h1 class="text-2xl font-bold mb-2">Analytics Dashboard</h1>
+            <p class="text-gray-600">View statistics and insights from your processed video lectures.</p>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto py-6 px-4">
         <!-- Tabs -->
         <div class="mb-6">
             <div class="border-b border-gray-200">
@@ -90,40 +121,30 @@
             });
         });
 
-        // Populate dashboard with data
-        const documentData = {
-            "word_count": 5473,
-            "processing_time": 412,
-            "chunk_count": 2,
-            "key_concepts": [
-                "Material Science", 
-                "Mathematization of Sciences", 
-                "Mathematics", 
-                "Knowledge Economy", 
-                "Berkeley-Edinburgh Research Symposium (BERS)",
-                "Democratization of Access to Talent",
-                "Intellectual Access",
-                "Interaction and Collaboration",
-                "Underrepresented Groups in STEM",
-                "Faculty Model"
-            ]
-        };
+        // Fetch and display stats
+        fetch('/api/v1/lectures/analytics')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('totalWordCount').textContent = 
+                    data.total_words?.toLocaleString() || '-';
+                document.getElementById('processingTime').textContent = 
+                    data.processing_time || '-';
+                document.getElementById('chunkCount').textContent = 
+                    data.total_lectures || '-';
 
-        // Update Word Statistics
-        document.getElementById('totalWordCount').textContent = documentData.word_count.toLocaleString();
-        document.getElementById('processingTime').textContent = documentData.processing_time;
-        document.getElementById('chunkCount').textContent = documentData.chunk_count;
-
-        // Populate Concepts
-        const conceptList = document.getElementById('conceptList');
-        documentData.key_concepts.forEach(concept => {
-            const conceptElement = document.createElement('div');
-            conceptElement.className = 'bg-blue-50 rounded-lg p-3';
-            conceptElement.innerHTML = `
-                <div class="font-medium text-blue-900">${concept}</div>
-            `;
-            conceptList.appendChild(conceptElement);
-        });
+                // Populate concepts
+                const conceptList = document.getElementById('conceptList');
+                Object.entries(data.concept_frequency || {}).forEach(([concept, count]) => {
+                    const conceptElement = document.createElement('div');
+                    conceptElement.className = 'bg-blue-50 rounded-lg p-3';
+                    conceptElement.innerHTML = `
+                        <div class="font-medium text-blue-900">${concept}</div>
+                        <div class="text-sm text-blue-600">Used ${count} times</div>
+                    `;
+                    conceptList.appendChild(conceptElement);
+                });
+            })
+            .catch(error => console.error('Error fetching stats:', error));
     });
     </script>
 </body>

@@ -68,7 +68,7 @@ def setup_logging():
         chat_logger.setLevel(logging.INFO)
 
         chat_file_handler = logging.handlers.RotatingFileHandler(
-            'chat.log',
+            'logs/chat.log',  # Use full path in logs directory
             maxBytes=10 * 1024 * 1024,
             backupCount=5,
             encoding='utf-8'

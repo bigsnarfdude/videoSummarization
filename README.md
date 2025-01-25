@@ -4,7 +4,7 @@ VideoLLM is an AI-powered application for processing and analyzing video and aud
 
 ## Features
 
-- Video transcription using Faster-Whisper
+- Video and Audio transcription using Faster-Whisper
 - AI-powered summarization with Ollama Microsoft phi4:latest
 - Automated Logseq note generation
 - Interactive LLM chat interface for content exploration using Ollama Microsoft phi4:latest

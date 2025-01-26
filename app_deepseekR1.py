@@ -1,0 +1,349 @@
+import os
+import sys
+import logging
+import logging.handlers
+import traceback
+import requests
+from typing import Optional, Tuple, Dict, Any, List
+from flask import send_from_directory, session
+from pathlib import Path
+from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestEntityTooLarge
+from flask import Flask, request, jsonify, render_template
+from config import settings
+from transcribe.processor import process_video
+from admin.api_routes import api_bp
+from admin import admin_bp
+from transcribe.get_video import process_local_video
+from transcribe.transcribe import transcribe
+from transcribe.summarize_model import split_text, summarize_in_parallel, save_summaries
+from transcribe.utils import get_filename
+from flask_cors import CORS
+from openai import OpenAI
+
+DEEPSEEK_API_KEY = "your-api-key"
+client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1")
+
+def init_directories():
+    log_dir = Path('logs')
+    os.makedirs(log_dir, exist_ok=True)
+    try:
+        log_dir.chmod(0o755)
+    except Exception as e:
+        print(f"Warning: Could not set log directory permissions: {e}")
+
+init_directories()
+
+def setup_logging():
+    try:
+        log_dir = Path(settings.LOG_FILE).parent
+        os.makedirs(log_dir, exist_ok=True)
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+        file_handler = logging.handlers.RotatingFileHandler(
+            settings.LOG_FILE,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8'
+        )
+        file_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
+
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(logging.Formatter(settings.LOG_FORMAT))
+
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+
+        logger = logging.getLogger(__name__)
+        logger.info("Logging initialized successfully")
+
+        try:
+            Path(settings.LOG_FILE).chmod(0o644)
+        except Exception as e:
+            logger.warning(f"Could not set log file permissions: {e}")
+
+        chat_logger = logging.getLogger('chat')
+        chat_logger.setLevel(logging.INFO)
+
+        chat_file_handler = logging.handlers.RotatingFileHandler(
+            'logs/chat.log',
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8'
+        )
+        chat_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+        chat_logger.addHandler(chat_file_handler)
+
+    except Exception as e:
+        print(f"Error setting up logging: {e}", file=sys.stderr)
+        raise
+
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = settings.MAX_FILE_SIZE
+app.config['SECRET_KEY'] = settings.SECRET_KEY
+app.config['SESSION_TYPE'] = 'filesystem'
+
+app.register_blueprint(admin_bp)
+app.register_blueprint(api_bp)
+
+setup_logging()
+logger = logging.getLogger(__name__)
+
+TRANSCRIPTS_DIR = settings.OUTPUT_DIRS["transcripts"]
+
+def prepare_context(history: List[str], context: str, query: str) -> str:
+    result = ""
+    if context:
+        result += f"Context:\n{context}\n\n"
+    if history:
+        result += "Previous conversation:\n"
+        for msg in history:
+            result += f"- {msg}\n"
+    result += f"\nCurrent query: {query}"
+    return result
+
+@app.route('/reports')
+def reports_page():
+    return render_template('reports.html')
+
+@app.route('/api/v1/downloads/<file_type>/<filename>')
+def download_file(file_type, filename):
+    directories = {
+        'audio': settings.OUTPUT_DIRS["audio"],
+        'transcripts': settings.OUTPUT_DIRS["transcripts"], 
+        'summaries': settings.OUTPUT_DIRS["summaries"],
+        'logseq': settings.OUTPUT_DIRS["logseq"]
+    }
+    
+    if file_type not in directories:
+        return jsonify({'error': 'Invalid file type'}), 400
+        
+    return send_from_directory(directories[file_type], filename)
+
+@app.route('/model/status')
+def model_status():
+    try:
+        response = client.models.list()
+        service_status = any(model.id == "deepseek-reasoner" for model in response)
+        return jsonify({
+            'status': 'ok' if service_status else 'error',
+            'details': {'service': service_status}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/list-transcripts')
+def list_transcripts():
+    try:
+        files = list(TRANSCRIPTS_DIR.glob('*.txt'))
+        txt_files = [f.name for f in files]
+        return jsonify({'files': txt_files}), 200
+    except Exception as e:
+        logger.error(f"Error listing transcripts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/get-latest-transcript')
+def get_latest_transcript():
+    try:
+        if 'latest_transcript' in session:
+            transcript_path = Path(session['latest_transcript'])
+            if transcript_path.exists():
+                with open(transcript_path, 'r') as f:
+                    transcript_text = f.read()
+                return jsonify({'transcript': transcript_text})
+        return jsonify({'transcript': None})
+    except Exception as e:
+        logger.error(f"Error reading transcript: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/transcripts/<filename>')
+def serve_transcript(filename):
+    try:
+        return send_from_directory(str(TRANSCRIPTS_DIR), filename, as_attachment=False)
+    except FileNotFoundError:
+        return jsonify({'error': f"File '{filename}' not found"}), 404
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/chat')
+def chat_page():
+    return render_template('chat.html')
+
+@app.route('/chat/message', methods=['POST'])
+def chat_with_model():
+    if not request.is_json:
+        return jsonify({'error': 'No data provided'}), 400
+
+    data = request.get_json()
+    query = data.get('query')
+    if not query:
+        return jsonify({'error': 'Query is required'}), 400
+
+    try:
+        history = data.get('history', [])
+        context = data.get('context', '')
+        prompt = prepare_context(history, context, str(query))
+        
+        response = client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant"},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        chat_logger = logging.getLogger('chat')
+        chat_logger.info(f"User query: {query}")
+        response_text = response.choices[0].message.content
+        chat_logger.info(f"DeepSeek response: {response_text}")
+
+        return jsonify({'response': response_text}), 200
+
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        return jsonify({
+            'error': str(e),
+            'details': traceback.format_exc()
+        }), 500
+
+def validate_file(file) -> Optional[str]:
+    if not file:
+        return "No file provided"
+    if not file.filename:
+        return "No file selected"
+    if len(file.filename) > settings.MAX_FILENAME_LENGTH:
+        return f"Filename too long (max {settings.MAX_FILENAME_LENGTH} characters)"
+
+    content_length = getattr(file, 'content_length', 0) or 0
+    if content_length > settings.MAX_FILE_SIZE:
+        return f"File size exceeds {settings.MAX_FILE_SIZE/(1024*1024)}MB limit"
+
+    if '.' not in file.filename:
+        return "Invalid file format"
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    if ext not in settings.ALLOWED_EXTENSIONS:
+        return "File type not allowed"
+    return None
+
+@app.route(f'{settings.API_PREFIX}/process', methods=['POST'])
+def process_video_endpoint() -> Tuple[Dict[str, Any], int]:
+    file_path = None
+    try:
+        if 'file' not in request.files:
+            logger.error("No file in request")
+            return jsonify({'error': 'No file selected'}), 400
+
+        file = request.files['file']
+        if not file.filename:
+            logger.error("Empty filename")
+            return jsonify({'error': 'No file selected'}), 400
+
+        error = validate_file(file)
+        if error:
+            logger.error(f"File validation error: {error}")
+            return jsonify({'error': error}), 400
+
+        title = request.form.get('title', Path(file.filename).stem)
+
+        try:
+            filename = secure_filename(file.filename)
+            file_path = settings.OUTPUT_DIRS["uploads"] / filename
+            logger.info(f"Saving uploaded file to: {file_path}")
+            file.save(file_path)
+            logger.info(f"File saved successfully: {file_path}")
+
+            logger.info(f"Starting video processing for: {filename}")
+            result = process_video(file_path, title)
+
+            if result['transcript_path']:
+                session['latest_transcript'] = str(result['transcript_path'])
+
+            response = {
+                'status': 'success',
+                'files': {
+                    'audio': str(result['audio_path'].name),
+                    'transcript': str(result['transcript_path'].name),
+                    'summary': str(result['summary_path'].name),
+                    'logseq': str(result['logseq_path'].name),
+                    'stats': f"{Path(result['transcript_path']).stem}_stats.json"
+                }
+            }
+            logger.info(f"Successfully processed video. Response: {response}")
+            return jsonify(response), 200
+
+        except Exception as e:
+            error_details = traceback.format_exc()
+            logger.error(f"Processing error: {error_details}")
+            return jsonify({
+                'error': str(e),
+                'details': error_details,
+                'type': type(e).__name__
+            }), 500
+
+    except RequestEntityTooLarge:
+        max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+        logger.error(f"File size exceeds limit: {max_mb}MB")
+        return jsonify({'error': f"File size exceeds {max_mb}MB limit"}), 400
+    except Exception as e:
+        error_details = traceback.format_exc()
+        logger.error(f"API error: {error_details}")
+        return jsonify({
+            'error': str(e),
+            'details': error_details,
+            'type': type(e).__name__
+        }), 500
+    finally:
+        if file_path and file_path.exists():
+            try:
+                file_path.unlink()
+                logger.info(f"Cleaned up uploaded file: {file_path}")
+            except Exception as e:
+                logger.error(f"Error cleaning up file {file_path}: {e}")
+
+@app.route('/status')
+def status() -> Tuple[Dict[str, str], int]:
+    return jsonify({'status': 'running'}), 200
+
+@app.errorhandler(404)
+def not_found_error(error):
+    logger.warning(f"404 error: {request.url}")
+    return jsonify({
+        'error': 'Not Found',
+        'message': 'The requested URL was not found on the server.'
+    }), 404
+
+@app.errorhandler(413)
+@app.errorhandler(RequestEntityTooLarge)
+def handle_large_file(e):
+    max_mb = settings.MAX_FILE_SIZE / (1024 * 1024)
+    logger.warning(f"File size exceeded {max_mb}MB limit")
+    return jsonify({
+        'error': f"File size exceeds {max_mb}MB limit"
+    }), 400
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {str(e)}")
+    logger.error(traceback.format_exc())
+    return jsonify({
+        'error': str(e),
+        'details': traceback.format_exc(),
+        'type': type(e).__name__
+    }), 500
+
+if __name__ == '__main__':
+    for directory in settings.OUTPUT_DIRS.values():
+        os.makedirs(directory, exist_ok=True)
+
+    logger.info(f"Starting server on {settings.HOST}:{settings.PORT}")
+    logger.info(f"Debug mode: {settings.DEBUG}")
+    CORS(app)
+    app.run(
+        debug=settings.DEBUG,
+        host=settings.HOST,
+        port=settings.PORT
+    )

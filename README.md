@@ -26,9 +26,7 @@ git clone <repository-url>
 cd videoLLM
 python -m venv venv
 source venv/bin/activate  # Unix/macOS
-# or
-venv\Scripts\activate     # Windows
-pip install -r requirements.txt
+
 ```
 
 2. Install FFmpeg:

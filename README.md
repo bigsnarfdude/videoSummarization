@@ -7,9 +7,9 @@ and creates structured notes for improved learning efficiency.
 ## Features
 
 - Video and Audio transcription using Faster-Whisper (transcription service using parakeet v2 option)
-- AI-powered summarization with Ollama Microsoft phi4:latest
+- AI-powered summarization with Ollama Gemma 3 QAT
 - Automated Logseq note generation
-- Interactive LLM chat interface for content exploration using Ollama Microsoft phi4:latest
+- Interactive LLM chat interface for content exploration using Ollama Gemma 3 QAT (working on visual QA)
 - Analytics dashboard for content insights
 
 ## Prerequisites

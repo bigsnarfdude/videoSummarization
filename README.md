@@ -43,7 +43,7 @@ sudo apt-get install ffmpeg
 3. Install Ollama and model:
 ```bash
 # Install Ollama from ollama.ai
-ollama pull phi4
+ollama pull google/gemma-3-27b-it-qat-q4_0-gguf
 ```
 
 4. Configure environment:

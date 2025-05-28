@@ -6,6 +6,7 @@ and creates structured notes for improved learning efficiency.
 
 https://gist.github.com/bigsnarfdude/7f2e2098e41044886dfe2d9d3344fc5c
 
+
 ## Features
 
 - Video and Audio transcription using Faster-Whisper (transcription service using parakeet v2 option)

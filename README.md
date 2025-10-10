@@ -1,7 +1,4 @@
 # VideoLLM
-
-WIP making it for gpt-oss 120b
-Upgrade to parakeet v2 for transcripts
  
 VideoLLM is an AI-powered application for processing and analyzing video and audio lectures. 
 It transcribes videos/audio, generates summaries, 
@@ -9,11 +6,10 @@ and creates structured notes for improved learning efficiency.
 
 https://gist.github.com/bigsnarfdude/7f2e2098e41044886dfe2d9d3344fc5c
 
-
 ## Features
 
-- Video and Audio transcription using Faster-Whisper (transcription service using parakeet v2 option)
-- AI-powered summarization with Ollama Gemma 3 QAT
+- Video and Audio transcription using Faster-Whisper
+- AI-powered summarization with Ollama GPT-OSS
 - Automated Logseq note generation
 - Interactive LLM chat interface for content exploration using Ollama Gemma 3 QAT (working on visual QA)
 - Analytics dashboard for content insights

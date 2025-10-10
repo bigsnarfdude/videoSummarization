@@ -1,17 +1,21 @@
 flask>=2.0.0
 werkzeug>=2.0.0
-huggingface_hub 
-transformers 
-torch
-torchvision
-torchaudio
+huggingface_hub
 numpy
 tqdm
 spacy
 scipy
 more-itertools
-tiktoken==0.3.3
-faster-whisper>=0.9.0
+tiktoken>=0.5.0  # Updated for Python 3.12 compatibility
 ffmpeg-python>=0.2.0
 pydantic-settings
 Flask-Cors
+requests
+beautifulsoup4
+pydub
+
+# NVIDIA NeMo for Parakeet TDT
+nemo_toolkit[asr]
+
+# Ollama client (for gpt-oss:20b summarization)
+ollama

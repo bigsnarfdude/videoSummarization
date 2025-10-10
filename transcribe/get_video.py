@@ -76,17 +76,67 @@ def process_local_video(video_path: str, output_path: Optional[str] = None) -> s
     convert_to_wav(str(video_path), str(new_file_path))
     return str(new_file_path)
 
+def extract_audio_dual(video_path: str, basename: str) -> dict:
+    """
+    Extract audio in TWO formats:
+    1. WAV (16kHz mono) - for Parakeet transcription
+    2. MP3 (128kbps stereo) - for audio.birs.ca
+
+    Args:
+        video_path: Path to input video
+        basename: Base name for output files (e.g., "25w5331_202506050900_Montejano")
+
+    Returns:
+        dict: {'wav': wav_path, 'mp3': mp3_path}
+    """
+    wav_dir = settings.OUTPUT_DIRS["audio_wav"]
+    mp3_dir = settings.OUTPUT_DIRS["audio_mp3"]
+
+    wav_dir.mkdir(parents=True, exist_ok=True)
+    mp3_dir.mkdir(parents=True, exist_ok=True)
+
+    wav_path = wav_dir / f"{basename}.wav"
+    mp3_path = mp3_dir / f"{basename}.mp3"
+
+    # Extract WAV for transcription (16kHz mono)
+    cmd_wav = (f'ffmpeg -y -i "{video_path}" -ar 16000 -ac 1 '
+               f'-c:a pcm_s16le "{wav_path}"')
+    logger.info(f"Extracting WAV: {cmd_wav}")
+    try:
+        subprocess.run(cmd_wav, shell=True, check=True, capture_output=True, text=True)
+        logger.info(f"Extracted WAV: {wav_path}")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error extracting WAV: {e.stderr}")
+        raise RuntimeError(f"Failed to extract WAV: {e.stderr}")
+
+    # Extract MP3 for audio.birs.ca (128kbps stereo)
+    cmd_mp3 = (f'ffmpeg -y -i "{video_path}" -b:a 128k -ac 2 '
+               f'-ar 44100 "{mp3_path}"')
+    logger.info(f"Extracting MP3: {cmd_mp3}")
+    try:
+        subprocess.run(cmd_mp3, shell=True, check=True, capture_output=True, text=True)
+        logger.info(f"Extracted MP3: {mp3_path}")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Error extracting MP3: {e.stderr}")
+        raise RuntimeError(f"Failed to extract MP3: {e.stderr}")
+
+    return {
+        'wav': str(wav_path),
+        'mp3': str(mp3_path)
+    }
+
 def convert_to_wav(movie_path: str, wav_path: str) -> str:
     """
     Converts a video file to a WAV file.
-    
+    (Legacy function for backward compatibility)
+
     Args:
         movie_path: Path to the input video file
         wav_path: Path where the WAV file should be saved
-        
+
     Returns:
         str: Path to the created WAV file
-        
+
     Raises:
         RuntimeError: If conversion fails
     """

@@ -87,7 +87,8 @@ Create your summary using bullet points starting with "•" and end with a main 
         response = requests.post('http://localhost:11434/api/generate', json={
             'model': 'gpt-oss:20b',
             'prompt': prompt,
-            'stream': False
+            'stream': False,
+            'keep_alive': 0  # Unload model immediately after use
         }, timeout=180)
 
         summary = response.json()['response']

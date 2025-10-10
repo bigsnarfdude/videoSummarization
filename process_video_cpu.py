@@ -81,7 +81,7 @@ Create your summary using bullet points starting with "•" and end with a main 
             'prompt': prompt,
             'stream': False,
             'keep_alive': 0  # Unload model immediately after use
-        }, timeout=600)  # 10 minutes per chunk (was 180s/3min)
+        }, timeout=180)
 
         summary = response.json()['response']
         summaries.append(summary)

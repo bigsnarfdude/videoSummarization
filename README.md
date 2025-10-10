@@ -1,6 +1,7 @@
 # VideoLLM
 
 WIP making it for gpt-oss 120b
+Upgrade to parakeet v2 for transcripts
  
 VideoLLM is an AI-powered application for processing and analyzing video and audio lectures. 
 It transcribes videos/audio, generates summaries, 

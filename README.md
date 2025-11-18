@@ -1,15 +1,17 @@
 # VideoLLM
 
 UPDATED
+**Just read the Gemini 3 Pro can take in full chalk talks and prcoess each frame directly including transcripts and audio.
+You can now just chat directly using powerful AI and BIRS lectures. Making this project a front end app to Gemini 3**
 
+ORIGINAL
 VideoLLM is an AI-powered application for processing and analyzing video and audio lectures. 
 It transcribes videos/audio, generates summaries, 
 and creates structured notes for improved learning efficiency.
 
 https://gist.github.com/bigsnarfdude/7f2e2098e41044886dfe2d9d3344fc5c
 
-Just read the Gemini 3 Pro can take in full chalk talks and prcoess each frame directly including transcripts and audio.
-You can now just chat directly using powerful AI and BIRS lectures. Making this project a front end app to Gemini 3
+
 
 ## Features
 

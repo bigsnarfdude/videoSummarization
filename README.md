@@ -8,6 +8,9 @@ and creates structured notes for improved learning efficiency.
 
 https://gist.github.com/bigsnarfdude/7f2e2098e41044886dfe2d9d3344fc5c
 
+Just read the Gemini 3 Pro can take in full chalk talks and prcoess each frame directly including transcripts and audio.
+You can now just chat directly using powerful AI and BIRS lectures. Making this project a front end app to Gemini 3
+
 ## Features
 
 - Video and Audio transcription using Faster-Whisper
